@@ -33,6 +33,7 @@
   "files": [
     "lib",
     "src",
+    "assets",
     "cordis.patch.yml",
     "LICENSE",
     "README.md",
