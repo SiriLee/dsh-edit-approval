@@ -10,6 +10,7 @@
 
 import { build } from 'esbuild'
 import { readFile } from 'node:fs/promises'
+import { pathToFileURL } from 'node:url'
 
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -33,7 +34,8 @@ export async function buildClientBundle() {
   })
 }
 
-// Direct execution (npm run build:client): build immediately.
-if (import.meta.url === new URL(`file://${process.argv[1] ?? ''}`).href) {
+// Direct execution (npm run build:client): build immediately. pathToFileURL
+// keeps the check working on Windows drive-letter paths.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await buildClientBundle()
 }

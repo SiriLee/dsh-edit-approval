@@ -2,6 +2,14 @@
   "name": "dsh-edit-approval",
   "version": "0.1.0",
   "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once, reject, or always allow (Claude Code behavior).",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "approval",
+    "diff",
+    "edit"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,8 +34,12 @@
     "lib",
     "src",
     "cordis.patch.yml",
+    "LICENSE",
     "README.md"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -46,7 +58,7 @@
     "build:portable": "node scripts/build-portable.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
-    "prepare": "npm run build:portable"
+    "prepare": "npm run build"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",
