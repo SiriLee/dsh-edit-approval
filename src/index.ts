@@ -7,9 +7,8 @@
  * `{ kind: 'ask', reason }` when a human decision is needed. The harness's
  * own `serviceAsk` routes that decision through `ctx.approval` — the session
  * policy (`ask`/`never`) keeps applying, and an `allowed-once` proceeds
- * while `rejected` denies the call. Tools on the always-allow list (and any
- * non-blocking case) delegate via `next()` so later policy listeners still
- * run.
+ * while `rejected` denies the call. Every non-blocking case delegates via
+ * `next()` so later policy listeners still run.
  *
  * Runtime state lives in the persisted `edit-approval` settings namespace
  * (schema defaults < cordis row config < user settings page); the
@@ -54,7 +53,10 @@ export const Config: z<Config> = z.object({
   includeDelete: z.boolean().default(true),
 })
 
-/** Fully resolved settings value (adds the runtime always-allow list). */
+/**
+ * Fully resolved settings value. Mirrors {@link Config} (must be kept in
+ * sync): schema defaults < row config < user settings page.
+ */
 interface SettingsValue {
   enabled: boolean
   tools: string[]

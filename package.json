@@ -67,6 +67,7 @@
     "@deepseek-ai/dsh-commands": "*",
     "@deepseek-ai/dsh-fs": "*",
     "@deepseek-ai/dsh-sandbox": "*",
+    "@deepseek-ai/dsh-settings": "*",
     "@deepseek-ai/dsh-tools": "*",
     "@deepseek-ai/schemastery": "*"
   },
@@ -103,6 +104,7 @@
     "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
     "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
     "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-settings": "0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@types/node": "^24.0.0",

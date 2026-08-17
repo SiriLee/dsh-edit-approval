@@ -121,7 +121,7 @@ function hasPendingApproval(ctx: ClientContext, key: string): boolean {
   return false
 }
 
-/** Inject the always-allow action into one freshly rendered approval panel. */
+/** Rebuild the diff headline of one freshly rendered approval panel. */
 function enhance(ctx: ClientContext, panel: Element): boolean {
   const key = panel.getAttribute('data-approval-key')
   if (key === null) return false
@@ -194,8 +194,8 @@ async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | 
 
 /**
  * Mount the browser half: inject the diff styles, register the
- * Settings → General master-switch row, observe approval panels and enhance
- * them, and bind the Enter-to-approve shortcut. Disposal unwinds everything.
+ * Settings → General master-switch row, and observe approval panels to
+ * enhance them. Disposal unwinds everything.
  * @param ctx - client root context carrying `sessions`, `slots`.
  */
 export function apply(ctx: ClientContext): void {

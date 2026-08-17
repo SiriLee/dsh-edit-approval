@@ -2,7 +2,7 @@
 
 DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝**；可随时关闭（用户开关）。
 
-> 状态：**已实现并发布 npm（v0.1.4，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝 + 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
+> 状态：**已实现并发布 npm（v0.1.5，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝 + 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
 
 ## 背景与定位
 
@@ -10,13 +10,13 @@ DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_repla
 
 ## 交互设计（Claude Code 参考）
 
-### 1. 每次编辑前：红绿 diff + 三选一
+### 1. 每次编辑前：红绿 diff + 二选一
 
 Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**，先弹出审批面板：
 
 - 面板头部：工具名 + 目标文件 + 变更统计（如 `edit · src/foo.ts (modify): 2 insertions, 1 deletion`）；
 - 主体：**红绿行级 diff**（`+` 新增行、`-` 删除行、` ` 上下文），与 Claude Code 的 edit approval 一致；
-- 操作三选一：
+- 操作二选一：
   - **同意**（允许一次）——本次编辑执行
   - **拒绝**——本次编辑不执行，模型收到「用户拒绝了 write」反馈，可自行调整
 
@@ -75,7 +75,7 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 - 只拦截写类**工具**；bash/pwsh 命令内的文件修改不在本期范围。
 - diff 以文本形式呈现在审批面板（`+`/`-` 行标记），非交互式逐行选择；「部分应用」不做。
 - `str_replace_editor` 的 `create` 命中已存在文件、`old_str`/`old_string` 非唯一或不存在等**工具自身会失败**的情形，插件不询问（放行后由工具报错）。空 `old_string` 的 `edit` 预览与实际工具行为有偏差（插件视为 not-found 放行；偏差方向安全，不误拦截）。
-- 已记录的取舍：按钮文案按浏览器语言（`navigator.language`）而非 dsh `ctx.locale`（自包含 bundle 的有意简化）；`peerDependencies` 大多声明为 `"*"`（规避 pnpm 在 git 安装时对未完整发布传递图的自动解析）；「允许一次」按钮按面板按钮顺序（reject 在前）推断，若上游面板结构调整需同步更新 `src/client/index.ts` 的注释处。
+- 已记录的取舍：按钮文案按浏览器语言（`navigator.language`）而非 dsh `ctx.locale`（自包含 bundle 的有意简化）；`peerDependencies` 大多声明为 `"*"`（规避 pnpm 在 git 安装时对未完整发布传递图的自动解析）。
 
 ## 明确不包含（本期）
 
@@ -140,7 +140,7 @@ dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
 
 ### 发布到 npm（GitHub Actions Trusted Publishing，已上线）
 
-已发布版本：`0.1.0`（本地 2FA）、`0.1.1`/`0.1.2`/`0.1.3`/`0.1.4`（CI OIDC + Sigstore provenance）。后续发版走 CI：
+已发布版本：`0.1.0`（本地 2FA）、`0.1.1`/`0.1.2`/`0.1.3`/`0.1.4`/`0.1.5`（CI OIDC + Sigstore provenance）。后续发版走 CI：
 
 ```sh
 npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
@@ -180,7 +180,6 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-edit-
 新开会话，让模型执行一次写操作（如 `write src/demo.ts`）：
 
 - **拒绝** → 工具返回「the user rejected tool "write"」，文件未写入，模型可自行调整；
-- **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问；
 - **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问。
 
 面板头部应显示 `write · src/demo.ts (create): N insertions, 0 deletions`，主体为

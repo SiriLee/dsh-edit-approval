@@ -208,9 +208,9 @@ export function formatReason(
  * Decide whether one write-family call must be approved.
  *
  * `pass` covers every case that should not block the call: disabled, tool
- * not whitelisted, always-allowed, non-edit `str_replace_editor` commands,
- * no-op edits, and edits below `minDiffLines`. `ask` carries the reason the
- * approval panel headlines.
+ * not whitelisted, non-edit `str_replace_editor` commands, no-op edits, and
+ * edits below `minDiffLines`. `ask` carries the reason the approval panel
+ * headlines.
  */
 export function decideApproval(input: GuardInput): GuardResult {
   const { settings, toolName, args, current, exists } = input
