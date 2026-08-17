@@ -39,9 +39,10 @@
     "build": "npm run build:host && npm run build:client",
     "build:host": "tsc -p tsconfig.json",
     "build:client": "tsc -p tsconfig.client.json && esbuild src/client/index.ts --bundle --platform=browser --format=cjs --outfile=lib/client.js --sourcemap --banner:js=\"window.__ModuleLoader__.load({ id: \\\"dsh-edit-approval\\\", factory: (require) => { var module = { exports: {} }; var exports = module.exports;\" --footer:js=\"return module.exports; } });\"",
+    "build:portable": "node scripts/build-portable.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
-    "prepare": "npm run build"
+    "prepare": "npm run build:portable"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0",
@@ -53,7 +54,7 @@
     "@deepseek-ai/dsh-settings": "*",
     "@deepseek-ai/dsh-client-runtime": "*"
   },
-  "devDependencies": {
+  "optionalDependencies": {
     "@deepseek-ai/cordis": "file:../../oss/deepseek-harness/vendor/cordis",
     "@deepseek-ai/schemastery": "file:../../oss/deepseek-harness/vendor/schemastery",
     "@deepseek-ai/dsh-tools": "file:../../oss/deepseek-harness/packages/core/tools",
@@ -61,7 +62,9 @@
     "@deepseek-ai/dsh-sandbox": "file:../../oss/deepseek-harness/packages/sandbox/sandbox",
     "@deepseek-ai/dsh-commands": "file:../../oss/deepseek-harness/packages/interaction/commands",
     "@deepseek-ai/dsh-settings": "file:../../oss/deepseek-harness/packages/settings/settings",
-    "@deepseek-ai/dsh-client-runtime": "file:../../oss/deepseek-harness/packages/client/runtime",
+    "@deepseek-ai/dsh-client-runtime": "file:../../oss/deepseek-harness/packages/client/runtime"
+  },
+  "devDependencies": {
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.6.0",
