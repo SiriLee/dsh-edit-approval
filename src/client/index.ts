@@ -223,17 +223,25 @@ export function apply(ctx: ClientContext): void {
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}`
     document.head.appendChild(style)
 
-    // Settings → General row: the edit-approval master switch.
-    const scope = ctx.settingsScope.bind<EditApprovalSettingsValue>({ namespace: SETTINGS_NAMESPACE })
+    // Settings → General row: the edit-approval master switch. The custom
+    // decode trusts the host-resolved value as-is: the default schema
+    // rehydration + validation path can reject our wire schema (arrays with
+    // defaults), which would leave the snapshot value unpublished and the
+    // toggle permanently unchecked despite a healthy host side.
+    const scope = ctx.settingsScope.bind<EditApprovalSettingsValue>({
+      namespace: SETTINGS_NAMESPACE,
+      decode: (value) => value as EditApprovalSettingsValue,
+    })
     const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
       id: 'edit-approval',
       order: 30,
       inject: () => ({
-        getSnapshot: () => scope.getSnapshot().value?.enabled === true,
+        getSnapshot: () => scope.getSnapshot().value?.enabled ?? true,
         subscribe: (cb: () => void) => scope.subscribe(cb),
         toggle: () => {
-          void scope.set('enabled', !(scope.getSnapshot().value?.enabled === true))
+          const next = !(scope.getSnapshot().value?.enabled ?? true)
+          void scope.set('enabled', next)
         },
       }),
     }, EditApprovalRow))
