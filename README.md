@@ -2,7 +2,7 @@
 
 DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝 / 对本命令总是同意**；可随时关闭（用户开关）。
 
-> 状态：**已实现（v0.1.0）**。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。
+> 状态：**已实现并发布 npm（v0.1.1，GitHub Actions Trusted Publishing + Sigstore provenance）**。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。
 
 ## 背景与定位
 
@@ -107,18 +107,24 @@ npm run build:portable  # 轻量构建（可选）：esbuild 打包 host 单文�
 
 ## 安装
 
-三种方式任选；安装后需**重启 dsh web**（`--profile web`）生效。
+已发布到 npm，**首选 registry 直装**；安装后需**重启 dsh web**（`--profile web`）生效。
 
-### 方式 1：本地 checkout（作者 / 贡献者）
+### 方式 1：registry 直装（所有使用者；推荐）
+
+```sh
+dsh plugin --profile web add dsh-edit-approval
+```
+
+### 方式 2：本地 checkout（作者 / 贡献者）
 
 ```sh
 cd dsh-edit-approval
-npm install      # 本机存在 deepseek-harness checkout 时自动链接其包用于类型检查/测试
+npm install      # devDeps 全部来自 npm registry，任意机器可直接安装
 npm run build    # tsc 全量构建（含 .d.ts）
 dsh plugin --profile web add /path/to/dsh-edit-approval   # link: 安装
 ```
 
-### 方式 2：GitHub 安装（其他使用者；推荐）
+### 方式 3：GitHub 安装（备选）
 
 ```sh
 dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
@@ -126,42 +132,40 @@ dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
 
 首次会失败：pnpm 默认阻止 git 依赖执行构建脚本。按 CLI 提示把 `allowBuilds` 键
 写入 profile 的 `pnpm-workspace.yaml`（例如 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`），
-再重跑一次即可。之后 pnpm 会自动运行插件的 `prepare`（自包含 esbuild 构建，无需本机
-harness checkout），并安装到 profile 内。建议**固定 commit**（`#<sha>`），避免上游
-push 静默改变安装时执行的代码。
+再重跑一次即可。之后 pnpm 会自动运行插件的 `prepare`（全量构建），并安装到 profile 内。
+建议**固定 commit**（`#<sha>`），避免上游 push 静默改变安装时执行的代码。
 
-### 方式 3：tarball / npm 发布（预构建产物，无需放行构建）
+### 方式 4：tarball（离线 / 自建 registry 场景）
 
 ```sh
-npm pack                                # 在插件仓库生成 dsh-edit-approval-0.1.0.tgz
-dsh plugin --profile web add ./dsh-edit-approval-0.1.0.tgz
+npm pack                                # 在插件仓库生成 dsh-edit-approval-<version>.tgz
+dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
 ```
 
 `npm pack` 会先运行 `prepare`（全量构建），包内始终包含**完整预构建 `lib/`（含 `.d.ts`）与 `LICENSE`**，
-`dsh plugin add` 不再运行任何构建脚本。发布到 npm 后可直接
-`dsh plugin --profile web add dsh-edit-approval`。
+`dsh plugin add` 不再运行任何构建脚本。
 
-### 发布到 npm（GitHub Actions Trusted Publishing，推荐）
+### 发布到 npm（GitHub Actions Trusted Publishing，已上线）
 
-发布走 CI（OIDC 可信发布，无需在 CI 中保存 NPM_TOKEN）：
+已发布版本：`0.1.0`（本地 2FA）、`0.1.1`（CI OIDC + Sigstore provenance）。后续发版走 CI：
 
 ```sh
 npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
 ```
 
-- **一次性前置**（npmjs.com）：打开 https://www.npmjs.com/package/dsh-edit-approval →
-  **Publishing** → 添加可信发布者：`Organization: SiriLee`、`Repository: dsh-edit-approval`、
-  `Workflow: publish.yml`、`Environment: 留空`。
+- **一次性前置**（npmjs.com，已完成）：包发布后在包页面右上角 **settings** → **Trusted Publisher**
+  区块（注意：入口在"每个包的 settings"，不是页面顶部标签）→ Provider: GitHub Actions、
+  `Organization: SiriLee`、`Repository: dsh-edit-approval`、`Workflow filename: publish.yml`、
+  `Environment: 留空`、`Allowed actions: npm publish`。
 - workflow 需要 `permissions: id-token: write`（已配置）：npm 用 GitHub Actions 的
-  OIDC 令牌换取短期 registry 凭据并附加 Sigstore provenance（`npm publish --provenance`）。
+  OIDC 令牌换取短期 registry 凭据并附加 Sigstore/SLSA provenance（`npm publish --provenance`）。
 - 触发方式：推送 `v<semver>` tag（要求与 `package.json` 的 `version` 一致，workflow 会校验），
   或仓库页手动 `workflow_dispatch`。
 - 每次 push / PR 由 `.github/workflows/ci.yml` 自动执行 typecheck + 43 测试 + 全量构建 +
   tarball 完整性检查（`lib/` 与 `LICENSE` 必须在包内）。
 - 包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
   `engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
-- 本地手动发布（不推荐）：`npm publish --provenance --access public`（需要 npm 端已配置可信发布者，
-  或本地 token 登录）。
+- 发布要求：npm CLI ≥ 11.5.1 + Node ≥ 22.14（workflow 已用 Node 24 并显式升级 npm）。
 
 ## 验证效果
 
