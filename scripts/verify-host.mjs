@@ -47,7 +47,6 @@ const settingsState = {
   minDiffLines: 0,
   includeCreate: true,
   includeDelete: true,
-  alwaysAllow: [],
 }
 const settingsScope = {
   get: () => ({ ...settingsState }),
@@ -78,8 +77,8 @@ const waitFor = (pred) => new Promise((resolve, reject) => {
   const probe = () => (pred() ? resolve() : (Date.now() - t0 > 2000 ? reject(new Error('timeout waiting for mount')) : setTimeout(probe, 1)))
   probe()
 })
-await waitFor(() => commands.length === 2)
-check('plugin mounted (2 commands registered)', true, '')
+await waitFor(() => commands.length === 1)
+check('plugin mounted (1 command registered)', true, '')
 
 const preExecute = (name, args, agent = undefined) => ctx.waterfall(
   ctx,
@@ -112,17 +111,8 @@ settingsState.enabled = true
 
 // ---- 4. slash commands ----
 const byName = (n) => commands.find((c) => c.name === n)
-const always = byName('approval-always')
 const edit = byName('approval-edit')
-check('approval-always + approval-edit registered', always !== undefined && edit !== undefined, commands.map((c) => c.name).join(','))
-
-const added = await always.handler({ rawInput: 'write', agent: { id: 'x' }, signal: new AbortController().signal })
-check('approval-always write adds to list', added.kind === 'success' && settingsState.alwaysAllow.includes('write'), JSON.stringify(added))
-
-settingsState.alwaysAllow = ['write']
-const allowed = await preExecute('write', { file_path: 'x.ts', content: 'x' })
-check('always-allowed tool passes without asking', allowed.kind === 'allow', JSON.stringify(allowed))
-
+check('approval-edit registered', edit !== undefined, commands.map((c) => c.name).join(','))
 const status = await edit.handler({ rawInput: 'status', agent: { id: 'x' }, signal: new AbortController().signal })
 check('approval-edit status reflects enabled', status.kind === 'success' && status.text.includes('on'), JSON.stringify(status))
 

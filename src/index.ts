@@ -13,7 +13,7 @@
  *
  * Runtime state lives in the persisted `edit-approval` settings namespace
  * (schema defaults < cordis row config < user settings page); the
- * `/approval-always` and `/approval-edit` commands manage it.
+ * `/approval-edit` command manages it.
  *
  * @module dsh-edit-approval
  */
@@ -61,7 +61,6 @@ interface SettingsValue {
   minDiffLines: number
   includeCreate: boolean
   includeDelete: boolean
-  alwaysAllow: string[]
 }
 
 const SettingsSchema: z<SettingsValue> = z.object({
@@ -70,7 +69,6 @@ const SettingsSchema: z<SettingsValue> = z.object({
   minDiffLines: z.number().default(0),
   includeCreate: z.boolean().default(true),
   includeDelete: z.boolean().default(true),
-  alwaysAllow: z.array(String).default([]),
 })
 
 /** Durable settings namespace backing every runtime toggle. */
@@ -105,36 +103,6 @@ export function apply(ctx: Context, config: Config): void {
   ctx.inject(['settings', 'commands', 'fs'], (scope) => {
     const settings = scope.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: config })
 
-    // --- `/approval-always <tool> | list | clear` ---
-    scope.commands.register({
-      name: 'approval-always',
-      description: 'Always allow a write-family tool (write/edit/str_replace_editor) without asking',
-      input: { hint: '<tool> | list | clear' },
-      handler: async (invocation) => {
-        const raw = invocation.rawInput.trim()
-        if (raw === 'list') {
-          const tools = settings.get().alwaysAllow
-          return tools.length === 0
-            ? { kind: 'success', text: 'always-allow list is empty' }
-            : { kind: 'success', text: `always-allow: ${tools.join(', ')}` }
-        }
-        if (raw === 'clear') {
-          await settings.update({ alwaysAllow: [] })
-          return { kind: 'success', text: 'always-allow list cleared' }
-        }
-        const tool = raw.split(/\s+/)[0]
-        if (tool === undefined || tool.length === 0) {
-          return { kind: 'error', text: 'usage: /approval-always <tool> | list | clear' }
-        }
-        const current = settings.get().alwaysAllow
-        if (!current.includes(tool)) {
-          await settings.update({ alwaysAllow: [...current, tool] })
-          return { kind: 'success', text: `"${tool}" added to always-allow; it will no longer ask` }
-        }
-        return { kind: 'success', text: `"${tool}" is already always-allowed` }
-      },
-    })
-
     // --- `/approval-edit on | off | status` ---
     scope.commands.register({
       name: 'approval-edit',
@@ -158,7 +126,6 @@ export function apply(ctx: Context, config: Config): void {
       const live = settings.get()
       if (!live.enabled) return next()
       if (!live.tools.includes(exec.name)) return next()
-      if (live.alwaysAllow.includes(exec.name)) return next()
       // A session on the deterministic `never` policy (e.g. the
       // danger-full-access preset) intends FULL access without prompting:
       // every `ask` this plugin emits would be auto-rejected by the approval

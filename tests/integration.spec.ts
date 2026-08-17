@@ -49,7 +49,6 @@ const SETTINGS_DEFAULTS: Record<string, unknown> = {
   minDiffLines: 0,
   includeCreate: true,
   includeDelete: true,
-  alwaysAllow: [],
 }
 
 /** Mount the host plugin on a bare cordis Context with stub services. */
@@ -90,7 +89,7 @@ async function mount(options: { approvalPolicy?: 'ask' | 'never' } = {}): Promis
   const fiber = ctx.plugin(plugin as never)
   // The dynamic ctx.inject callback registers the listener and commands on a
   // later tick; the harness must observe the fully mounted plugin.
-  await waitFor(() => commands.length === 2)
+  await waitFor(() => commands.length === 1)
 
   return {
     ctx,
@@ -171,17 +170,6 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
     }
   })
 
-  it('passes when the tool is on the always-allow list (delegates to the chain)', async () => {
-    const h = await mount()
-    try {
-      await h.settings.update({ alwaysAllow: ['edit'] })
-      const decision = await preExecute(h, 'edit', { file_path: 'src/a.ts', old_string: 'a', new_string: 'b' })
-      expect(decision).toEqual({ kind: 'allow' })
-    } finally {
-      await h.dispose()
-    }
-  })
-
   it('passes when the plugin is disabled', async () => {
     const h = await mount()
     try {
@@ -203,17 +191,11 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
     }
   })
 
-  it('registers the /approval-always and /approval-edit commands', async () => {
+  it('registers the /approval-edit command', async () => {
     const h = await mount()
     try {
       const names = h.commands.map(command => command.name).sort()
-      expect(names).toEqual(['approval-always', 'approval-edit'])
-
-      const always = h.commands.find(command => command.name === 'approval-always')!
-      const result = await always.handler({ rawInput: 'write' })
-      expect(result).toMatchObject({ kind: 'success' })
-      expect(h.settings.get().alwaysAllow).toEqual(['write'])
-      expect(await always.handler({ rawInput: 'list' })).toMatchObject({ text: 'always-allow: write' })
+      expect(names).toEqual(['approval-edit'])
 
       const edit = h.commands.find(command => command.name === 'approval-edit')!
       expect(await edit.handler({ rawInput: 'status' })).toMatchObject({ text: 'edit approval is on' })

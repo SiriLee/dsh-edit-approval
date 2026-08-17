@@ -33,8 +33,6 @@ export interface EditApprovalSettings {
   includeCreate: boolean
   /** Whether clearing/emptying a file asks for approval. */
   includeDelete: boolean
-  /** Tool names that never ask (managed via `/approval-always`). */
-  alwaysAllow: readonly string[]
 }
 
 export type EditOperation = 'create' | 'modify' | 'delete'
@@ -218,7 +216,6 @@ export function decideApproval(input: GuardInput): GuardResult {
   const { settings, toolName, args, current, exists } = input
   if (!settings.enabled) return { kind: 'pass' }
   if (!settings.tools.includes(toolName)) return { kind: 'pass' }
-  if (settings.alwaysAllow.includes(toolName)) return { kind: 'pass' }
   if (toolName === 'str_replace_editor' && args.command === 'view') return { kind: 'pass' }
   const filePath = targetPathOf(toolName, args)
   if (filePath === undefined) return { kind: 'pass' }

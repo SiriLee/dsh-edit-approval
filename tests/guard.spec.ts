@@ -16,7 +16,6 @@ function settings(overrides: Partial<EditApprovalSettings> = {}): EditApprovalSe
     minDiffLines: 0,
     includeCreate: true,
     includeDelete: true,
-    alwaysAllow: [],
     ...overrides,
   }
 }
@@ -105,11 +104,6 @@ describe('decideApproval', () => {
 
   it('passes when the tool is not whitelisted', () => {
     const result = decideApproval({ settings: settings({ tools: ['edit'] }), toolName: 'write', args: { file_path: 'a.ts' }, current: '', exists: false })
-    expect(result).toEqual({ kind: 'pass' })
-  })
-
-  it('passes when the tool is always-allowed', () => {
-    const result = decideApproval({ settings: settings({ alwaysAllow: ['write'] }), toolName: 'write', args: { file_path: 'a.ts' }, current: '', exists: false })
     expect(result).toEqual({ kind: 'pass' })
   })
 

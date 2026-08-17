@@ -1,12 +1,12 @@
 # dsh-edit-approval
 
-DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝 / 对本命令总是同意**；可随时关闭（用户开关）。
+DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝**；可随时关闭（用户开关）。
 
-> 状态：**已实现并发布 npm（v0.1.4，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝/总是允许（按钮居中）+ 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
+> 状态：**已实现并发布 npm（v0.1.4，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝 + 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
 
 ## 背景与定位
 
-社区编辑审查类插件是**事后**路线（[`dsh-change-review`](https://github.com/cirelir/dsh-change-review) 跟踪并渲染 diff、可回滚，但不拦截执行）；审批类插件（[`dsh-smart-approval`](https://github.com/TingRuDeng/dsh-smart-approval)、[`dsh-auto-approval-plugin`](https://github.com/StyxNether/dsh-auto-approval-plugin)）调整的是审批**模式/权限档位**，不针对单个编辑。「编辑前逐 diff 审批 + 总是允许」在社区是空白。
+社区编辑审查类插件是**事后**路线（[`dsh-change-review`](https://github.com/cirelir/dsh-change-review) 跟踪并渲染 diff、可回滚，但不拦截执行）；审批类插件（[`dsh-smart-approval`](https://github.com/TingRuDeng/dsh-smart-approval)、[`dsh-auto-approval-plugin`](https://github.com/StyxNether/dsh-auto-approval-plugin)）调整的是审批**模式/权限档位**，不针对单个编辑。「编辑前逐 diff 审批」在社区是空白。
 
 ## 交互设计（Claude Code 参考）
 
@@ -19,13 +19,11 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 - 操作三选一：
   - **同意**（允许一次）——本次编辑执行
   - **拒绝**——本次编辑不执行，模型收到「用户拒绝了 write」反馈，可自行调整
-  - **总是允许**——本次执行，且该工具加入「始终允许名单」，以后不再询问（可随时移除）
 
 ### 2. 用户开关
 
 - 总开关（`enabled`）：随时开启/关闭整个插件（关闭后编辑直接执行，无审批）；
 - 设置方式：设置页开关（Settings → General「编辑前审批」，经 host 命令 `/approval-edit` 读写）+ 命令 `/approval-edit on|off|status`（两者同源等价）；
-- 名单管理：`/approval-always <tool>`（添加）、`/approval-always list`、`/approval-always clear`（名单持久化在 settings 文档中，重启不丢）。
 
 ### 3. 与既有权限体系的关系
 
@@ -44,16 +42,9 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 - 返回 `{ kind: 'ask', reason: '<工具名与文件与统计> \n <diff 文本>' }`：harness 内部 `serviceAsk` 自动调用 `ctx.approval.request(...)` 并把 `reason` 路由到 Web 审批面板 headline（已验证 `ApprovalPanel.tsx` headline 渲染 reason、无长度上限、body 可滚动）——**host 端零 UI 改动**。
 - `allowed-once` → 工具继续；`rejected` → 工具 deny（不执行）。非询问情形一律 `return next()` 委托后续监听器，不短路其他策略。
 
-### 5. 「总是允许」名单
-
-- 持久化于 `edit-approval` settings 命名空间的 `alwaysAllow` 字段（schema 默认 `[]`），`tools/pre-execute` 先查名单，命中则 `next()` 放行，不打扰。
-- 名单写入入口：命令 `/approval-always <tool>`（host 端注册，公开 `ctx.commands`），客户端「总是允许」按钮复用它。
-
 ## 客户端实现要点（纯插件，无源码补丁）
 
-- 「总是允许」第三按钮：注入到现有审批面板 `[data-approval-key]` 容器内的操作行（与「拒绝/允许一次」并排），仅依赖稳定 DOM 锚点，无新页面、无新弹窗、无 React。
-- 点击「总是允许」= 两步：①模拟点击面板既有「允许一次」按钮（本次放行）；②经 `session.command('/approval-always <tool>')` 把工具加入名单（工具名从运行时 `session.getSnapshot().pending` 中按 `data-approval-key` 匹配到的 approval payload 的 `toolName` 获取）。
-- 面板出现/消失由 `MutationObserver` 观察 `[data-approval-key]` 处理；按钮文案按浏览器语言显示「总是允许 / Always allow」。
+- 面板出现/消失由 `MutationObserver` 观察 `[data-approval-key]` 处理。
 - **diff 呈现（红绿行）**：面板 headline 的 reason 是纯文本（CSS 无法按行着色），插件将其重建为逐行 DOM——头行（工具·文件·统计）保留，变更行红绿显示（`+` 绿 / `-` 红，等宽字体），灰色上下文行折叠为 `…` 省略标记（大编辑不刷屏）；host 的 reason 文本保持完整，仅 web 端展示时过滤。
 - **换行补偿**：另注入一条 pre-wrap 样式（`[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`），兜底 reason 文本被 HTML 折叠换行的问题；上游若修复此样式则自然冗余无害。
 - **生命周期**：所有副作用（observer、样式、待触发的 DOMContentLoaded 钩子）注册为单个 `ctx.effect`，插件卸载 / HMR 时完整清理。
@@ -78,14 +69,12 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 | `minDiffLines` | `0` | 变更行数**低于**此值不询问（放行小改动） |
 | `includeCreate` | `true` | 新建文件是否询问 |
 | `includeDelete` | `true` | 清空/删除是否询问 |
-| `alwaysAllow` | `[]` | 「总是允许」名单（命令/客户端维护，持久化） |
 
 ## 边界与已知限制
 
 - 只拦截写类**工具**；bash/pwsh 命令内的文件修改不在本期范围。
 - diff 以文本形式呈现在审批面板（`+`/`-` 行标记），非交互式逐行选择；「部分应用」不做。
 - `str_replace_editor` 的 `create` 命中已存在文件、`old_str`/`old_string` 非唯一或不存在等**工具自身会失败**的情形，插件不询问（放行后由工具报错）。空 `old_string` 的 `edit` 预览与实际工具行为有偏差（插件视为 not-found 放行；偏差方向安全，不误拦截）。
-- 「总是允许」名单持久化于 settings 文档（经 `/approval-always` 维护）；若 settings 提供方不可用则退化为无名单。
 - 已记录的取舍：按钮文案按浏览器语言（`navigator.language`）而非 dsh `ctx.locale`（自包含 bundle 的有意简化）；`peerDependencies` 大多声明为 `"*"`（规避 pnpm 在 git 安装时对未完整发布传递图的自动解析）；「允许一次」按钮按面板按钮顺序（reject 在前）推断，若上游面板结构调整需同步更新 `src/client/index.ts` 的注释处。
 
 ## 明确不包含（本期）
@@ -192,8 +181,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-edit-
 
 - **拒绝** → 工具返回「the user rejected tool "write"」，文件未写入，模型可自行调整；
 - **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问；
-- **总是允许** → 本次写入执行，该工具加入始终允许名单，之后同类工具不再询问（可随时
-  用 `/approval-always list` 查看、`/approval-always clear` 清除）。
+- **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问。
 
 面板头部应显示 `write · src/demo.ts (create): N insertions, 0 deletions`，主体为
 `+`/`-` 前缀的红绿行 diff。
@@ -204,9 +192,6 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-edit-
 /approval-edit status          # 查看总开关
 /approval-edit off             # 关闭后写操作直接执行，不再询问
 /approval-edit on
-/approval-always edit          # 把 edit 加入始终允许名单
-/approval-always list
-/approval-always clear
 ```
 
 ### 4. 与权限预设联动
@@ -225,10 +210,10 @@ npm run typecheck && npm test    # 43 个用例：diff/guard 纯函数 + 真实 
 ## 目录结构
 
 ```
-src/index.ts            host 插件：tools/pre-execute 拦截 + /approval-always、/approval-edit 命令 + settings 注册
+src/index.ts            host 插件：tools/pre-execute 拦截 + /approval-edit 命令 + settings 注册
 src/diff.ts             行级 diff 文本生成（纯函数：LCS 对齐、渲染、统计）
 src/guard.ts            拦截决策逻辑（纯函数：工具匹配、阈值、名单、create/delete、ask/放行判定）
-src/client/index.ts     client 插件：「总是允许」按钮注入 + 换行补偿样式 + 生命周期清理
+src/client/index.ts     client 插件：红绿 diff 渲染 + 设置页开关 + 生命周期清理
 tests/diff.spec.ts      diff 单测
 tests/guard.spec.ts     guard 单测
 tests/integration.spec.ts  真实 cordis Context + 桩服务的 host 集成测试
@@ -243,7 +228,7 @@ tsconfig.json / tsconfig.client.json    host / client 双编译面
 
 - `@deepseek-ai/dsh-tools`：`tools/pre-execute` 事件、`PreToolDecision`、`ToolExecution`
 - `@deepseek-ai/dsh-user-approval`：`ctx.approval`（由 `{kind:'ask'}` 自动路由）
-- `@deepseek-ai/dsh-commands`：`/approval-always`、`/approval-edit` 命令注册
+- `@deepseek-ai/dsh-commands`：`/approval-edit` 命令注册
 - `@deepseek-ai/dsh-settings`：`edit-approval` 命名空间（开关 + 名单持久化）
 - `@deepseek-ai/dsh-fs` / `@deepseek-ai/dsh-sandbox`：目标文件读取与会话 cwd 规则
 - 客户端：`@deepseek-ai/dsh-client-runtime/client`（`session.command`、`session.getSnapshot().pending`；全部 type-only，不进入 bundle）
