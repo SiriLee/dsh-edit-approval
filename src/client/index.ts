@@ -143,13 +143,16 @@ function scan(ctx: ClientContext): void {
 }
 
 /**
- * Read the latest `/approval-edit` command outcome ("... is on/off") from the
- * session snapshot, or null when none has settled yet.
+ * Read the latest `/approval-edit` command outcome ("... is on/off") at or
+ * after `fromIndex` in the chat order from the session snapshot, or null when
+ * none has settled yet. The index baseline lets a caller wait for a FRESH
+ * outcome instead of the stale one from a command it just issued.
  */
-function approvalEditStatus(session: SessionFace): boolean | null {
+function approvalEditStatus(session: SessionFace, fromIndex = 0): boolean | null {
   let last: string | undefined
   const snapshot = session.getSnapshot()
-  for (const key of snapshot.chat.order) {
+  for (let index = fromIndex; index < snapshot.chat.order.length; index += 1) {
+    const key = snapshot.chat.order[index]!
     const node = snapshot.chat.nodes.get(key)
     if (node?.kind !== 'command') continue
     const command = node.data as { name?: string; outcome?: { kind?: string; text?: string } }
@@ -158,7 +161,9 @@ function approvalEditStatus(session: SessionFace): boolean | null {
     }
   }
   if (last === undefined) return null
-  return / is on/.test(last)
+  // Accepts both the status wording ("... is on") and the toggle wording
+  // ("... turned on"); both commands' success texts end in " on" / " off".
+  return /(?:is|turned) on$/.test(last)
 }
 
 /** Resolve the current session face (the settings page opens within one). */
@@ -167,11 +172,18 @@ function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
   return id === undefined ? undefined : ctx.sessions.binding(id)?.session
 }
 
-/** Run `/approval-edit status` and wait for its command outcome on the session. */
-async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | null> {
-  const session = currentSessionOf(ctx)
-  if (session === undefined) return null
-  await session.command('/approval-edit status')
+/**
+ * Wait until an approval-edit command outcome at/after `base` (the chat order
+ * length captured BEFORE dispatching the command) settles in the session
+ * snapshot. Settling on the command's own baselined outcome guarantees we
+ * read what that command committed — never a stale earlier outcome. Resolves
+ * `null` on timeout.
+ */
+async function waitForApprovalEditOutcome(
+  session: SessionFace,
+  base: number,
+  timeoutMs = 4000,
+): Promise<boolean | null> {
   return await new Promise<boolean | null>((resolve) => {
     let settled = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -183,13 +195,22 @@ async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | 
       resolve(value)
     }
     const check = (): void => {
-      const value = approvalEditStatus(session)
+      const value = approvalEditStatus(session, base)
       if (value !== null) settle(value)
     }
     const unsubscribe = session.subscribe(check)
-    timer = setTimeout(() => settle(null), 4000)
+    timer = setTimeout(() => settle(null), timeoutMs)
     check()
   })
+}
+
+/** Run `/approval-edit status` and wait for its (baselined) command outcome. */
+async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | null> {
+  const session = currentSessionOf(ctx)
+  if (session === undefined) return null
+  const base = session.getSnapshot().chat.order.length
+  await session.command('/approval-edit status')
+  return await waitForApprovalEditOutcome(session, base)
 }
 
 /**
@@ -215,17 +236,33 @@ export function apply(ctx: ClientContext): void {
       order: 30,
       inject: () => ({
         getStatus: () => approvalEditStatusCommand(ctx),
-        toggle: (next: boolean) => {
+        // Resolves with the value the host committed: the toggle command's
+        // own baselined outcome, not a later guess.
+        toggle: async (next: boolean): Promise<boolean | null> => {
           const session = currentSessionOf(ctx)
-          if (session === undefined) return
-          void session.command(`/approval-edit ${next ? 'on' : 'off'}`)
+          if (session === undefined) return null
+          const base = session.getSnapshot().chat.order.length
+          await session.command(`/approval-edit ${next ? 'on' : 'off'}`)
+          return await waitForApprovalEditOutcome(session, base)
         },
       }),
     }, EditApprovalRow))
 
     let observer: MutationObserver | undefined
+    let scanFrame: number | undefined
+    // Batch mutations into one scan per animation frame: a busy session
+    // mutates the chat DOM on every streamed token, and a full
+    // `[data-approval-key]` query per mutation is wasted while no panel is
+    // open. One frame-level scan covers any burst of changes.
+    const scheduleScan = (): void => {
+      if (scanFrame !== undefined) return
+      scanFrame = requestAnimationFrame(() => {
+        scanFrame = undefined
+        scan(ctx)
+      })
+    }
     const start = (): void => {
-      observer = new MutationObserver(() => { scan(ctx) })
+      observer = new MutationObserver(() => { scheduleScan() })
       observer.observe(document.body, { childList: true, subtree: true })
       scan(ctx)
     }
@@ -236,6 +273,7 @@ export function apply(ctx: ClientContext): void {
     yield () => {
       unbindRow()
       observer?.disconnect()
+      if (scanFrame !== undefined) cancelAnimationFrame(scanFrame)
       document.removeEventListener('DOMContentLoaded', onReady)
       style.remove()
     }

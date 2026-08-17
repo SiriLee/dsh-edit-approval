@@ -87,6 +87,42 @@ describe('computeLineDiff', () => {
     expect(context?.oldLine).toBe(1)
     expect(context?.newLine).toBe(1)
   })
+
+  it('keeps a small edit in a large file precise (no whole-file dump)', () => {
+    const oldLines = Array.from({ length: 3000 }, (_, i) => `line-${i}`).join('\n')
+    const newLines = oldLines.replace('line-100', 'line-100 EDITED')
+    const diff = computeLineDiff(oldLines, newLines)
+    // The untrimmed LCS cap would have reported 6000 changed lines (the whole
+    // file). The trim reports exactly the one replaced line, with the
+    // unchanged head/tail preserved as context.
+    expect(countChangedLines(diff)).toBe(2)
+    expect(diff[0]?.type).toBe('context')
+    expect(diff[diff.length - 1]?.type).toBe('context')
+    const remove = diff.find(line => line.type === 'remove')
+    const add = diff.find(line => line.type === 'add')
+    expect(remove?.oldLine).toBe(101)
+    expect(add?.newLine).toBe(101)
+  })
+
+  it('preserves 1-based line numbers across a trimmed head and tail', () => {
+    const oldText = 'a\nb\nc\nd\ne\nOLD\nf\ng\nh'
+    const newText = 'a\nb\nc\nd\ne\nNEW\nf\ng\nh'
+    const diff = computeLineDiff(oldText, newText)
+    expect(typesOf(diff)).toEqual([
+      'context', 'context', 'context', 'context', 'context',
+      'remove', 'add',
+      'context', 'context', 'context',
+    ])
+    expect(textsOf(diff)).toEqual(['a', 'b', 'c', 'd', 'e', 'OLD', 'NEW', 'f', 'g', 'h'])
+    expect(diff[5]?.oldLine).toBe(6)
+    expect(diff[6]?.newLine).toBe(6)
+  })
+
+  it('handles a change in the tail region after a long equal head', () => {
+    const diff = computeLineDiff('a\nb\nc', 'a\nb\nc\nappended')
+    expect(typesOf(diff)).toEqual(['context', 'context', 'context', 'add'])
+    expect(diff[3]?.newLine).toBe(4)
+  })
 })
 
 describe('renderDiff', () => {

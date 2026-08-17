@@ -38,9 +38,43 @@ export function splitLines(text: string): string[] {
 /**
  * Compute a line-level diff between two texts (CRLF is normalized for the
  * comparison; the emitted line text keeps its original bytes).
+ *
+ * Equal head/tail runs are trimmed before the LCS so the alignment (and its
+ * overflow fallback) only ever sees the changed middle — a one-line edit in a
+ * 5000-line file diffs two tiny middles instead of a 25M-cell table or a
+ * whole-file dump. Trimming only removes lines that are identical at both
+ * boundaries, which any optimal alignment would mark as context anyway.
  */
 export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
-  return diffLineArrays(splitLines(oldText), splitLines(newText))
+  return diffTextArrays(splitLines(oldText), splitLines(newText))
+}
+
+/** Align two line arrays, trimming identical head/tail lines off first. */
+function diffTextArrays(oldLines: readonly string[], newLines: readonly string[]): DiffLine[] {
+  const n = oldLines.length
+  const m = newLines.length
+  let head = 0
+  while (head < n && head < m && oldLines[head] === newLines[head]) head += 1
+  let tail = 0
+  while (head + tail < n && head + tail < m && oldLines[n - 1 - tail] === newLines[m - 1 - tail]) tail += 1
+  const out: DiffLine[] = []
+  for (let i = 0; i < head; i += 1) {
+    out.push({ type: 'context', text: oldLines[i]!, oldLine: i + 1, newLine: i + 1 })
+  }
+  for (const line of diffLineArrays(oldLines.slice(head, n - tail), newLines.slice(head, m - tail))) {
+    out.push({
+      type: line.type,
+      text: line.text,
+      ...line.oldLine !== undefined ? { oldLine: line.oldLine + head } : {},
+      ...line.newLine !== undefined ? { newLine: line.newLine + head } : {},
+    })
+  }
+  for (let i = 0; i < tail; i += 1) {
+    const oldIdx = n - tail + i
+    const newIdx = m - tail + i
+    out.push({ type: 'context', text: oldLines[oldIdx]!, oldLine: oldIdx + 1, newLine: newIdx + 1 })
+  }
+  return out
 }
 
 /** Whole-file replacement alignment (the overflow fallback). */

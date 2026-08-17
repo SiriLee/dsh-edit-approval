@@ -54,24 +54,11 @@ export const Config: z<Config> = z.object({
 })
 
 /**
- * Fully resolved settings value. Mirrors {@link Config} (must be kept in
- * sync): schema defaults < row config < user settings page.
+ * The settings namespace schema — identical to the row {@link Config} by
+ * design (schema defaults < row config < user settings page), so the two can
+ * never drift apart.
  */
-interface SettingsValue {
-  enabled: boolean
-  tools: string[]
-  minDiffLines: number
-  includeCreate: boolean
-  includeDelete: boolean
-}
-
-const SettingsSchema: z<SettingsValue> = z.object({
-  enabled: z.boolean().default(true),
-  tools: z.array(String).default([...DEFAULT_TOOLS]),
-  minDiffLines: z.number().default(0),
-  includeCreate: z.boolean().default(true),
-  includeDelete: z.boolean().default(true),
-})
+const SettingsSchema = Config
 
 /** Durable settings namespace backing every runtime toggle. */
 const SETTINGS_NAMESPACE = settingsNamespace('edit-approval')

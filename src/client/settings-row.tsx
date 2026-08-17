@@ -8,7 +8,8 @@
  * same route the keyboard user uses — proven reliable, unlike the client
  * settingsScope RPC which could not persist writes for this namespace. The
  * checkbox flips an optimistic local state on click (instant feedback), then
- * re-queries the host status so the row settles on the true value.
+ * settles on the value the toggle command itself committed — deterministic,
+ * no polling delay, no snap-back to a previous outcome.
  *
  * @module dsh-edit-approval/client/settings-row
  */
@@ -19,8 +20,8 @@ import { useEffect, useState } from 'react'
 export interface EditApprovalRowInjected {
   /** Resolve the current host enabled state via `/approval-edit status`. */
   getStatus(): Promise<boolean | null>
-  /** Persist the given enabled state via `/approval-edit on|off`. */
-  toggle(next: boolean): void
+  /** Persist the given enabled state; resolves with the value the host committed. */
+  toggle(next: boolean): Promise<boolean | null>
 }
 
 /**
@@ -62,15 +63,12 @@ export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) 
         onChange={() => {
           const next = !shown
           setEnabled(next) // flip the visual right away
-          toggle(next) // host command path
-          // Settle on the host truth — but only AFTER this command's outcome
-          // lands: an immediate read still sees the PREVIOUS /approval-edit
-          // outcome and would snap the toggle straight back.
-          setTimeout(() => {
-            void getStatus().then((value) => {
-              if (value !== null) setEnabled(value)
-            })
-          }, 600)
+          // Settle on the value the host committed: toggle resolves with the
+          // toggle command's own baselined outcome — deterministic, no polling
+          // delay, and no snap-back to a previous outcome.
+          void toggle(next).then((value) => {
+            if (value !== null) setEnabled(value)
+          })
         }}
         aria-label={zh ? '编辑前审批' : 'Edit approval'}
       />
