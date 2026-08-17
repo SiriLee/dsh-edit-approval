@@ -1,0 +1,26 @@
+/**
+ * `edit-approval` locale dictionary — the single source of truth for the
+ * Settings → General row copy. Registered with the harness locale service
+ * (`ctx.locale.register`) in {@link ./index.ts}, so the row follows the
+ * user's dsh language preference (`locale.preference`), not `navigator`.
+ *
+ * @module dsh-edit-approval/client/locales
+ */
+
+/** Dictionary namespace owned by this plugin (declared in `LocaleNamespaceMap`). */
+export const NS = 'edit-approval'
+
+/** Simplified Chinese dictionary (the key-set source of truth). */
+export const zh = {
+  'settings.title': '编辑前审批',
+  'settings.description': '写类工具（write/edit/str_replace_editor）执行前弹出 diff 审批',
+} as const
+
+/** English dictionary. */
+export const en: Record<EditApprovalKey, string> = {
+  'settings.title': 'Edit approval',
+  'settings.description': 'Ask before write/edit/str_replace_editor with a line diff',
+}
+
+/** Dictionary key union (derived from the zh source of truth). */
+export type EditApprovalKey = keyof typeof zh

@@ -20,13 +20,24 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the settings slot declaration ('settings.general.item').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: pulls the locale service merge (`ctx.locale`) and the slot
+// declaration; runtime copy comes from the locale dictionary below.
+import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditApprovalRow } from './settings-row.tsx'
+import { en, NS, zh, type EditApprovalKey } from './locales.ts'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** The edit-approval Settings → General row copy. */
+    'edit-approval': EditApprovalKey
+  }
+}
 
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
-/** Required services: sessions (pending approvals), slots (the settings row). */
-export const inject = ['sessions', 'slots']
+/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy). */
+export const inject = ['sessions', 'slots', 'locale']
 
 /** The approval panel root anchor (set by ApprovalPanel.tsx). */
 const PANEL_SELECTOR = '[data-approval-key]'
@@ -220,6 +231,10 @@ async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | 
  * @param ctx - client root context carrying `sessions`, `slots`.
  */
 export function apply(ctx: ClientContext): void {
+  // Locale dictionary: the Settings → General row copy follows the user's dsh
+  // language preference. Registered once for the plugin's lifetime.
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-edit-approval: locale dictionaries')
+
   ctx.effect(function* () {
     const style = document.createElement('style')
     style.dataset.plugin = 'dsh-edit-approval'
@@ -229,11 +244,13 @@ export function apply(ctx: ClientContext): void {
     // Settings → General row: the edit-approval master switch. Status and
     // writes go through the host `/approval-edit` command — the route proven
     // reliable — instead of the client settingsScope RPC (which could not
-    // persist writes for this namespace in this deployment).
+    // persist writes for this namespace in this deployment). `locale: NS`
+    // synthesizes the `t` seat on the row's props.
     const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
       id: 'edit-approval',
       order: 30,
+      locale: NS,
       inject: () => ({
         getStatus: () => approvalEditStatusCommand(ctx),
         // Resolves with the value the host committed: the toggle command's

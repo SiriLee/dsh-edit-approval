@@ -15,6 +15,8 @@
  */
 
 import { useEffect, useState } from 'react'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { NS } from './locales.ts'
 
 /** Reactive face injected by the registrant (bound to the /approval-edit command). */
 export interface EditApprovalRowInjected {
@@ -24,11 +26,15 @@ export interface EditApprovalRowInjected {
   toggle(next: boolean): Promise<boolean | null>
 }
 
+/** Full Settings-row props: the injected face plus the locale `t` seat. */
+type EditApprovalRowProps = EditApprovalRowInjected & PropsLocale<typeof NS>
+
 /**
- * The General-settings toggle row.
- * @param props - the injected face; General rows carry no owner share.
+ * The General-settings toggle row. Copy is read through the harness locale
+ * seat (`t`), so it follows the user's dsh language preference.
+ * @param props - the injected face and the locale `t` seat.
  */
-export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) {
+export function EditApprovalRow({ getStatus, toggle, t }: EditApprovalRowProps) {
   const [enabled, setEnabled] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true
@@ -40,7 +46,6 @@ export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const shown = enabled === true
-  const zh = typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')
   return (
     <label
       style={{
@@ -52,9 +57,9 @@ export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) 
         cursor: 'pointer',
       }}
     >
-      <span>{zh ? '编辑前审批' : 'Edit approval'}</span>
+      <span>{t('settings.title')}</span>
       <span style={{ color: 'var(--dsw-alias-label-tertiary, #868e96)' }}>
-        {zh ? '写类工具（write/edit/str_replace_editor）执行前弹出 diff 审批' : 'Ask before write/edit/str_replace_editor with a line diff'}
+        {t('settings.description')}
       </span>
       <input
         type="checkbox"
@@ -70,7 +75,7 @@ export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) 
             if (value !== null) setEnabled(value)
           })
         }}
-        aria-label={zh ? '编辑前审批' : 'Edit approval'}
+        aria-label={t('settings.title')}
       />
     </label>
   )
