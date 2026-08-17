@@ -14,6 +14,7 @@
 
 import { build } from 'esbuild'
 import { mkdir } from 'node:fs/promises'
+import { buildClientBundle } from './build-client.mjs'
 
 await mkdir('lib', { recursive: true })
 
@@ -30,16 +31,5 @@ await build({
   logLevel: 'info',
 })
 
-// Browser half: the __ModuleLoader__.load handoff artifact.
-await build({
-  entryPoints: ['src/client/index.ts'],
-  outfile: 'lib/client.js',
-  bundle: true,
-  platform: 'browser',
-  format: 'cjs',
-  target: 'es2022',
-  sourcemap: true,
-  logLevel: 'info',
-  banner: { js: 'window.__ModuleLoader__.load({ id: "dsh-edit-approval", factory: (require) => { var module = { exports: {} }; var exports = module.exports;' },
-  footer: { js: 'return module.exports; } });' },
-})
+// Browser half: the __ModuleLoader__.load handoff artifact (single source).
+await buildClientBundle()

@@ -51,6 +51,8 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 - 「总是允许」第三按钮：注入到现有审批面板 `[data-approval-key]` 容器内的操作行（与「拒绝/允许一次」并排），仅依赖稳定 DOM 锚点，无新页面、无新弹窗、无 React。
 - 点击「总是允许」= 两步：①模拟点击面板既有「允许一次」按钮（本次放行）；②经 `session.command('/approval-always <tool>')` 把工具加入名单（工具名从运行时 `session.getSnapshot().pending` 中按 `data-approval-key` 匹配到的 approval payload 的 `toolName` 获取）。
 - 面板出现/消失由 `MutationObserver` 观察 `[data-approval-key]` 处理；按钮文案按浏览器语言显示「总是允许 / Always allow」。
+- **换行补偿**：审批面板 `.headline` 的 CSS 无 `white-space: pre-wrap`，HTML 会把 reason 里的 `\n` 折叠成空格，行级 diff 会挤成一行。插件注入一条按稳定属性锚点定位的样式（`[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`）恢复换行；上游若修复此样式则本规则自然冗余无害。
+- **生命周期**：所有副作用（observer、样式、待触发的 DOMContentLoaded 钩子）注册为单个 `ctx.effect`，插件卸载 / HMR 时完整清理。
 
 ## 配置项
 
@@ -78,8 +80,9 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 
 - 只拦截写类**工具**；bash/pwsh 命令内的文件修改不在本期范围。
 - diff 以文本形式呈现在审批面板（`+`/`-` 行标记），非交互式逐行选择；「部分应用」不做。
-- `str_replace_editor` 的 `create` 命中已存在文件、`old_str`/`old_string` 非唯一或不存在等**工具自身会失败**的情形，插件不询问（放行后由工具报错）。
+- `str_replace_editor` 的 `create` 命中已存在文件、`old_str`/`old_string` 非唯一或不存在等**工具自身会失败**的情形，插件不询问（放行后由工具报错）。空 `old_string` 的 `edit` 预览与实际工具行为有偏差（插件视为 not-found 放行；偏差方向安全，不误拦截）。
 - 「总是允许」名单持久化于 settings 文档（经 `/approval-always` 维护）；若 settings 提供方不可用则退化为无名单。
+- 已记录的取舍：按钮文案按浏览器语言（`navigator.language`）而非 dsh `ctx.locale`（自包含 bundle 的有意简化）；`peerDependencies` 大多声明为 `"*"`（规避 pnpm 在 git 安装时对未完整发布传递图的自动解析）；「允许一次」按钮按面板按钮顺序（reject 在前）推断，若上游面板结构调整需同步更新 `src/client/index.ts` 的注释处。
 
 ## 明确不包含（本期）
 
@@ -90,12 +93,12 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 ## 构建与测试
 
 ```sh
-npm install        # @deepseek-ai/* 经 optionalDependencies 的 file: 链接到本地
-                   # deepseek-harness checkout（../../oss/deepseek-harness/…），
-                   # 缺失时自动跳过（他人机器上不影响）
+npm install        # devDeps 全部来自 npm registry（@deepseek-ai/dsh-* 0.1.0-rc.6、
+                   # cordis ^4.0.1、schemastery ^3.18.1），任意机器可直接安装，
+                   # 不再需要本机 deepseek-harness checkout
 npm run typecheck  # tsc 双编译面（host + client 声明）
 npm test           # vitest：diff / guard 纯函数单测 + 真实 cordis Context 集成测试（43 个用例）
-npm run build      # 作者全量构建：tsc → lib/（含 .d.ts）+ esbuild → lib/client.js
+npm run build      # 作者全量构建：tsc → lib/（含 .d.ts）+ scripts/build-client.mjs → lib/client.js
 npm run build:portable  # 自包含构建（prepare 用）：esbuild 打包 host 单文件 + client，
                         # 无需任何 @deepseek-ai 类型——git 安装/打包时自动执行
 ```
@@ -190,11 +193,12 @@ npm run typecheck && npm test    # 43 个用例：diff/guard 纯函数 + 真实 
 src/index.ts            host 插件：tools/pre-execute 拦截 + /approval-always、/approval-edit 命令 + settings 注册
 src/diff.ts             行级 diff 文本生成（纯函数：LCS 对齐、渲染、统计）
 src/guard.ts            拦截决策逻辑（纯函数：工具匹配、阈值、名单、create/delete、ask/放行判定）
-src/client/index.ts     client 插件：「总是允许」按钮注入（MutationObserver + DOM 锚点）
+src/client/index.ts     client 插件：「总是允许」按钮注入 + 换行补偿样式 + 生命周期清理
 tests/diff.spec.ts      diff 单测
 tests/guard.spec.ts     guard 单测
 tests/integration.spec.ts  真实 cordis Context + 桩服务的 host 集成测试
 scripts/build-portable.mjs  自包含 esbuild 构建（prepare 生命周期）
+scripts/build-client.mjs    client bundle 构建（loader 闭包单一来源）
 cordis.patch.yml        bundle patch（插入插件行）
 package.json            dsh.bundle + dsh.client 声明、peerDependencies(@deepseek-ai/*, optional)
 tsconfig.json / tsconfig.client.json    host / client 双编译面

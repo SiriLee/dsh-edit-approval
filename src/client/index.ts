@@ -11,6 +11,9 @@
  * session's pending approval payload (`session.getSnapshot().pending`), so
  * the host command receives the exact tool that is asking.
  *
+ * All side effects (observer, style tag, injected buttons) are registered as
+ * one `ctx.effect`, so plugin unload / HMR tears them down.
+ *
  * @module dsh-edit-approval/client
  */
 
@@ -27,6 +30,20 @@ const PANEL_SELECTOR = '[data-approval-key]'
 
 /** Attribute marking our injected button. */
 const ALWAYS_ALLOW_ATTR = 'data-dsh-edit-approval-always'
+
+/**
+ * Plugin-side compensation for a harness presentation quirk: the approval
+ * panel headlines the `reason` text in `.headline`, whose CSS has no
+ * `white-space: pre-wrap`, so HTML collapses the `\n` line breaks of our
+ * multi-line diff into spaces. This rule targets the headline by stable
+ * structural anchors (the panel root and the scrollable body seat, both
+ * data attributes) and restores the line structure. Harmless if the harness
+ * ever adds `pre-wrap` upstream — the selector simply stops matching nothing
+ * extra.
+ */
+const PREWRAP_STYLE = [
+  `[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`,
+].join('\n')
 
 /** Panels already enhanced in this page lifetime. */
 const enhanced = new WeakSet<Element>()
@@ -62,7 +79,11 @@ function enhance(ctx: ClientContext, panel: Element): boolean {
   const match = resolveApproval(ctx, key)
   if (match === undefined) return false // pending not visible yet; a later mutation retries
   const buttons = Array.from(panel.querySelectorAll('button'))
-  // Panel layout is reject, then allow-once — the allow-once button is last.
+  // The panel renders exactly two actions — reject first, then allow-once
+  // (ApprovalPanel.tsx: `<Button variant="outline">` reject, `<Button
+  // variant="primary">` allow-once). The allow-once button is therefore the
+  // last one; if the panel ever grows more actions, match by data attribute
+  // instead of relying on this order.
   const allowOnce = buttons[buttons.length - 1]
   if (allowOnce === undefined) return false
   const actionRow = allowOnce.parentElement
@@ -107,13 +128,34 @@ function scan(ctx: ClientContext): void {
   }
 }
 
-/** Mount the browser half: observe the document and enhance every approval panel. */
+/**
+ * Mount the browser half: inject the pre-wrap compensation style, then
+ * observe the document and enhance every approval panel. Disposal unwinds
+ * the observer, the pending DOMContentLoaded hook, and the style tag; the
+ * injected buttons ride the panel DOM and are removed by React with it.
+ * @param ctx - client root context carrying `sessions`.
+ */
 export function apply(ctx: ClientContext): void {
-  const start = (): void => {
-    const observer = new MutationObserver(() => { scan(ctx) })
-    observer.observe(document.body, { childList: true, subtree: true })
-    scan(ctx)
-  }
-  if (document.body !== null) start()
-  else document.addEventListener('DOMContentLoaded', start, { once: true })
+  ctx.effect(function* () {
+    const style = document.createElement('style')
+    style.dataset.plugin = 'dsh-edit-approval'
+    style.textContent = PREWRAP_STYLE
+    document.head.appendChild(style)
+
+    let observer: MutationObserver | undefined
+    const start = (): void => {
+      observer = new MutationObserver(() => { scan(ctx) })
+      observer.observe(document.body, { childList: true, subtree: true })
+      scan(ctx)
+    }
+    const onReady = (): void => { start() }
+    if (document.body !== null) start()
+    else document.addEventListener('DOMContentLoaded', onReady, { once: true })
+
+    yield () => {
+      observer?.disconnect()
+      document.removeEventListener('DOMContentLoaded', onReady)
+      style.remove()
+    }
+  }, 'dsh-edit-approval client lifecycle')
 }

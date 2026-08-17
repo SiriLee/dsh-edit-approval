@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once, reject, or always allow (Claude Code behavior).",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SiriLee/dsh-edit-approval.git"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -38,7 +42,7 @@
   "scripts": {
     "build": "npm run build:host && npm run build:client",
     "build:host": "tsc -p tsconfig.json",
-    "build:client": "tsc -p tsconfig.client.json && esbuild src/client/index.ts --bundle --platform=browser --format=cjs --outfile=lib/client.js --sourcemap --banner:js=\"window.__ModuleLoader__.load({ id: \\\"dsh-edit-approval\\\", factory: (require) => { var module = { exports: {} }; var exports = module.exports;\" --footer:js=\"return module.exports; } });\"",
+    "build:client": "tsc -p tsconfig.client.json && node scripts/build-client.mjs",
     "build:portable": "node scripts/build-portable.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
@@ -64,17 +68,15 @@
     "@deepseek-ai/dsh-settings": { "optional": true },
     "@deepseek-ai/dsh-client-runtime": { "optional": true }
   },
-  "optionalDependencies": {
-    "@deepseek-ai/cordis": "file:../../oss/deepseek-harness/vendor/cordis",
-    "@deepseek-ai/schemastery": "file:../../oss/deepseek-harness/vendor/schemastery",
-    "@deepseek-ai/dsh-tools": "file:../../oss/deepseek-harness/packages/core/tools",
-    "@deepseek-ai/dsh-fs": "file:../../oss/deepseek-harness/packages/fs/fs",
-    "@deepseek-ai/dsh-sandbox": "file:../../oss/deepseek-harness/packages/sandbox/sandbox",
-    "@deepseek-ai/dsh-commands": "file:../../oss/deepseek-harness/packages/interaction/commands",
-    "@deepseek-ai/dsh-settings": "file:../../oss/deepseek-harness/packages/settings/settings",
-    "@deepseek-ai/dsh-client-runtime": "file:../../oss/deepseek-harness/packages/client/runtime"
-  },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-commands": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-settings": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.6",
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.6.0",
