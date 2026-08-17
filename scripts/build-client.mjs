@@ -32,6 +32,14 @@ export async function buildClientBundle() {
     banner: { js: CLIENT_BANNER },
     footer: { js: CLIENT_FOOTER },
   })
+  // Smoke check: the artifact must carry the loader handoff with the exact
+  // package id — a build regression (e.g. an inlined banner) fails here, in
+  // the build step, instead of silently breaking the browser boot.
+  const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const expected = `window.__ModuleLoader__.load({ id: ${JSON.stringify(pkg.name)}`
+  if (!bundle.includes(expected)) {
+    throw new Error(`client bundle missing loader handoff for ${pkg.name}`)
+  }
 }
 
 // Direct execution (npm run build:client): build immediately. pathToFileURL

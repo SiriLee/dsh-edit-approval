@@ -160,12 +160,14 @@ npm version patch && git push origin main --tags   # 触发 .github/workflows/pu
 - workflow 需要 `permissions: id-token: write`（已配置）：npm 用 GitHub Actions 的
   OIDC 令牌换取短期 registry 凭据并附加 Sigstore/SLSA provenance（`npm publish --provenance`）。
 - 触发方式：推送 `v<semver>` tag（要求与 `package.json` 的 `version` 一致，workflow 会校验），
-  或仓库页手动 `workflow_dispatch`。
-- 每次 push / PR 由 `.github/workflows/ci.yml` 自动执行 typecheck + 43 测试 + 全量构建 +
-  tarball 完整性检查（`lib/` 与 `LICENSE` 必须在包内）。
+  或仓库页手动 `workflow_dispatch`。**幂等**：版本已在 npm 则跳过发布（重复 tag / 手动重跑安全）；
+  tag 自动创建 GitHub Release（`--generate-notes`）。
+- 每次 push / PR 由 `.github/workflows/ci.yml` 自动执行（Node 22，覆盖 `engines` 下限）：
+  typecheck + 43 测试 + 全量构建 + **`scripts/verify-host.mjs` 构建产物级验证** +
+  tarball 完整性检查（`lib/` 与 `LICENSE` 必须在包内）。发布时在 Node 24 上跑同一套并加
+  npm ≥ 11.5.1 校验（OIDC 必需）。
 - 包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
   `engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
-- 发布要求：npm CLI ≥ 11.5.1 + Node ≥ 22.14（workflow 已用 Node 24 并显式升级 npm）。
 
 ## 验证效果
 

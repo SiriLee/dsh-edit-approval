@@ -9,6 +9,7 @@
 #   Repository: dsh-edit-approval
 #   Workflow:   publish.yml  (filename only, must match .github/workflows/)
 #   Environment: (leave blank)
+#   Allowed actions: npm publish
 #
 # Trigger: push a `v<semver>` tag matching package.json version (recommended)
 # or run the workflow manually. Release flow:
@@ -23,14 +24,19 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # create the GitHub Release
   # Required for npm trusted publishing: npm exchanges this OIDC token for a
   # short-lived registry credential and attaches Sigstore provenance.
   id-token: write
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -40,14 +46,24 @@ jobs:
           # (docs.npmjs.com/trusted-publishers); Node 24 ships npm 11.x.
           node-version: 24
 
-      - name: Ensure npm >= 11.5.1 (trusted publishing requirement)
-        run: npm install -g npm@latest
+      - name: Verify npm >= 11.5.1 (trusted publishing requirement)
+        run: |
+          set -euo pipefail
+          ver=$(npm --version)
+          echo "npm: $ver"
+          if [ "$(printf '%s\n' '11.5.1' "$ver" | sort -V | head -1)" != '11.5.1' ]; then
+            echo "::error::npm $ver < 11.5.1 — OIDC publish needs >= 11.5.1"
+            exit 1
+          fi
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck & test
         run: npm run typecheck && npm test
+
+      - name: Build (full, with .d.ts) and verify built artifact
+        run: npm run build && node scripts/verify-host.mjs
 
       - name: Verify tag matches package version
         run: |
@@ -63,7 +79,37 @@ jobs:
             echo "manual dispatch: publishing $(node -p "require('./package.json').version")"
           fi
 
+      # Idempotency guard: makes workflow_dispatch re-runs (and tag pushes of
+      # an already-published version) safe instead of failing on EPUBLISHCONFLICT.
+      - name: Skip publish if version already on npm
+        id: check
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${NAME}@${VERSION} already on npm — skipping publish step."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Trusted publishing: npm reads the CI OIDC token automatically
       # (ACTIONS_ID_TOKEN_REQUEST_URL). No NODE_AUTH_TOKEN secret needed.
-      - name: Publish to npm
+      - name: Publish to npm via OIDC
+        if: steps.check.outputs.already_published == 'false'
         run: npm publish --provenance --access public
+
+      - name: Create GitHub Release (if missing)
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists — leaving it alone."
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --repo "${{ github.repository }}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              --latest
+          fi

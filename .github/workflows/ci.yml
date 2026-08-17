@@ -1,5 +1,9 @@
-# Continuous verification for dsh-edit-approval: typecheck, tests, and a
-# full build on every push and pull request, before any publish.
+# Continuous verification for dsh-edit-approval: typecheck, tests, a full
+# build with artifact verification, and tarball completeness on every push
+# and pull request — before any publish.
+#
+# Node 22 (the engines lower bound ^22.19.0) covers the supported floor;
+# the publish workflow pins Node 24 for the OIDC requirement instead.
 
 name: ci
 
@@ -14,15 +18,17 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck
@@ -30,12 +36,13 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build (full, with .d.ts)
-        run: npm run build
+      - name: Build (full, with .d.ts) and verify built artifact
+        run: npm run build && node scripts/verify-host.mjs
 
       - name: Pack sanity (tarball must contain lib/ and LICENSE)
         run: |
           npm pack --dry-run 2>&1 | tee /tmp/pack.txt
           grep -q 'lib/index.js' /tmp/pack.txt
           grep -q 'lib/types/index.d.ts' /tmp/pack.txt
+          grep -q 'lib/client.js' /tmp/pack.txt
           grep -q 'LICENSE' /tmp/pack.txt

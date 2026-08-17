@@ -58,6 +58,7 @@
     "build:portable": "node scripts/build-portable.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "test": "vitest run",
+    "verify:host": "node scripts/verify-host.mjs",
     "prepare": "npm run build"
   },
   "peerDependencies": {
