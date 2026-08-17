@@ -63,9 +63,14 @@ export function EditApprovalRow({ getStatus, toggle }: EditApprovalRowInjected) 
           const next = !shown
           setEnabled(next) // flip the visual right away
           toggle(next) // host command path
-          void getStatus().then((value) => {
-            if (value !== null) setEnabled(value) // settle on the host truth
-          })
+          // Settle on the host truth — but only AFTER this command's outcome
+          // lands: an immediate read still sees the PREVIOUS /approval-edit
+          // outcome and would snap the toggle straight back.
+          setTimeout(() => {
+            void getStatus().then((value) => {
+              if (value !== null) setEnabled(value)
+            })
+          }, 600)
         }}
         aria-label={zh ? '编辑前审批' : 'Edit approval'}
       />
