@@ -1,0 +1,41 @@
+# Continuous verification for dsh-edit-approval: typecheck, tests, and a
+# full build on every push and pull request, before any publish.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build (full, with .d.ts)
+        run: npm run build
+
+      - name: Pack sanity (tarball must contain lib/ and LICENSE)
+        run: |
+          npm pack --dry-run 2>&1 | tee /tmp/pack.txt
+          grep -q 'lib/index.js' /tmp/pack.txt
+          grep -q 'lib/types/index.d.ts' /tmp/pack.txt
+          grep -q 'LICENSE' /tmp/pack.txt

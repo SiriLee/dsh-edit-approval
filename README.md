@@ -141,16 +141,27 @@ dsh plugin --profile web add ./dsh-edit-approval-0.1.0.tgz
 `dsh plugin add` 不再运行任何构建脚本。发布到 npm 后可直接
 `dsh plugin --profile web add dsh-edit-approval`。
 
-### 发布到 npm（可选）
+### 发布到 npm（GitHub Actions Trusted Publishing，推荐）
+
+发布走 CI（OIDC 可信发布，无需在 CI 中保存 NPM_TOKEN）：
 
 ```sh
-npm run typecheck && npm test && npm run build   # 发布前全量验证
-npm publish                                       # tarball 内容与 `npm pack` 一致（含 lib/、LICENSE、README）
+npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
 ```
 
-包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
-`engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
-发布后建议在 GitHub 仓库保留 `dsh-plugin` topic 以便发现。
+- **一次性前置**（npmjs.com）：打开 https://www.npmjs.com/package/dsh-edit-approval →
+  **Publishing** → 添加可信发布者：`Organization: SiriLee`、`Repository: dsh-edit-approval`、
+  `Workflow: publish.yml`、`Environment: 留空`。
+- workflow 需要 `permissions: id-token: write`（已配置）：npm 用 GitHub Actions 的
+  OIDC 令牌换取短期 registry 凭据并附加 Sigstore provenance（`npm publish --provenance`）。
+- 触发方式：推送 `v<semver>` tag（要求与 `package.json` 的 `version` 一致，workflow 会校验），
+  或仓库页手动 `workflow_dispatch`。
+- 每次 push / PR 由 `.github/workflows/ci.yml` 自动执行 typecheck + 43 测试 + 全量构建 +
+  tarball 完整性检查（`lib/` 与 `LICENSE` 必须在包内）。
+- 包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
+  `engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
+- 本地手动发布（不推荐）：`npm publish --provenance --access public`（需要 npm 端已配置可信发布者，
+  或本地 token 登录）。
 
 ## 验证效果
 

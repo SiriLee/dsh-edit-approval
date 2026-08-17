@@ -1,0 +1,63 @@
+# Publish dsh-edit-approval to npm via GitHub Actions Trusted Publishing
+# (OIDC — no long-lived NPM_TOKEN is stored or required).
+#
+# Prerequisite (one-time, on npmjs.com):
+#   https://www.npmjs.com/package/dsh-edit-approval → "Publishing" →
+#   add a trusted publisher:
+#     Organization: SiriLee
+#     Repository:   dsh-edit-approval
+#     Workflow:     publish.yml
+#     Environment:  (leave blank)
+#
+# Trigger: push a `v<semver>` tag matching package.json version (recommended)
+# or run the workflow manually. Release flow:
+#   npm version patch && git push origin main --tags
+
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required for npm trusted publishing: npm exchanges this OIDC token for a
+  # short-lived registry credential and attaches Sigstore provenance.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck & test
+        run: npm run typecheck && npm test
+
+      - name: Verify tag matches package version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            PKG_VERSION="$(node -p "require('./package.json').version")"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${PKG_VERSION}" >&2
+              exit 1
+            fi
+            echo "publishing ${PKG_VERSION} from tag ${GITHUB_REF_NAME}"
+          else
+            echo "manual dispatch: publishing $(node -p "require('./package.json').version")"
+          fi
+
+      # Trusted publishing: npm reads the CI OIDC token automatically
+      # (ACTIONS_ID_TOKEN_REQUEST_URL). No NODE_AUTH_TOKEN secret needed.
+      - name: Publish to npm
+        run: npm publish --provenance --access public
