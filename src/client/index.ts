@@ -16,7 +16,7 @@
 
 // Type-only: both are module-table words, never inlined; the runtime code
 // below touches only the DOM and the session face.
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SessionFace, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the settings slot declaration ('settings.general.item') and
 // the settingsScope Context merge (`ctx.settingsScope.bind`).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -162,6 +162,40 @@ function scan(ctx: ClientContext): void {
   }
 }
 
+/** Resolve the current session face (the settings page opens within one). */
+function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
+  const id = ctx.sessions.list.getSnapshot().current
+  return id === undefined ? undefined : ctx.sessions.binding(id)?.session
+}
+
+/**
+ * Wait until the settings scope reports `enabled === expected`. The toggle
+ * writes through the host `/approval-edit` command (reliable), and the host's
+ * `settings.update` is pushed back to this scope; resolve once it lands, or
+ * with the current value on timeout so the row never sticks on an optimistic
+ * lie.
+ */
+function waitForEnabled(host: SettingsScope<EditApprovalSettings>, expected: boolean): Promise<boolean | null> {
+  return new Promise((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const settle = (value: boolean | null): void => {
+      if (settled) return
+      settled = true
+      if (timer !== undefined) clearTimeout(timer)
+      unsubscribe()
+      resolve(value)
+    }
+    const check = (): void => {
+      const value = host.getSnapshot().value?.enabled
+      if (value === expected) settle(value ?? null)
+    }
+    const unsubscribe = host.subscribe(check)
+    timer = setTimeout(() => settle(host.getSnapshot().value?.enabled ?? null), 4000)
+    check()
+  })
+}
+
 /**
  * Mount the browser half: inject the diff styles, register the
  * Settings → General master-switch row, and observe approval panels to
@@ -173,9 +207,10 @@ export function apply(ctx: ClientContext): void {
   // language preference. Registered once for the plugin's lifetime.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-edit-approval: locale dictionaries')
 
-  // The row state reads and writes through the settings scope directly (the
-  // same route the harness's own Language row uses), so toggling never emits
-  // a `/approval-edit` command into the chat — no per-session status text.
+  // The row READS through the settings scope (no `/approval-edit status`
+  // command into the chat) but WRITES through the host command — the route
+  // that reliably persists. `settingsScope.set` never landed on the host for
+  // this namespace, so the toggle must go through the command path.
   const host = ctx.settingsScope.bind<EditApprovalSettings>({ namespace: 'edit-approval' })
 
   ctx.effect(function* () {
@@ -193,11 +228,13 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => ({
         getStatus: () => Promise.resolve(host.getSnapshot().value?.enabled ?? null),
-        // `set` resolves after the write settles (or, on a rejected write,
-        // reloads host state), then the snapshot reflects the committed value.
         toggle: async (next: boolean): Promise<boolean | null> => {
-          await host.set('enabled', next)
-          return host.getSnapshot().value?.enabled ?? null
+          const session = currentSessionOf(ctx)
+          if (session === undefined) return null
+          // Write through the host command (the handler returns no text, so
+          // nothing surfaces in the chat); then settle on the pushed-back value.
+          await session.command(`/approval-edit ${next ? 'on' : 'off'}`)
+          return await waitForEnabled(host, next)
         },
       }),
     }, EditApprovalRow))

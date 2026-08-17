@@ -104,7 +104,10 @@ export function apply(ctx: Context, config: Config): void {
         }
         if (mode === 'on' || mode === 'off') {
           await settings.update({ enabled: mode === 'on' })
-          return { kind: 'success', text: `edit approval turned ${mode}` }
+          // No text: the settings row drives the toggle through this command,
+          // and an echoed result would surface in every session's chat. Manual
+          // users still get status via the `status` arm above.
+          return { kind: 'success' }
         }
         return { kind: 'error', text: 'usage: /approval-edit on | off | status' }
       },
