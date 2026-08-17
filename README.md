@@ -90,20 +90,96 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 ## 构建与测试
 
 ```sh
-npm install        # devDeps 为 file: 链接到本地 deepseek-harness checkout（../../oss/deepseek-harness/…）
-npm run build      # host: tsc → lib/；client: tsc 声明 + esbuild → lib/client.js（__ModuleLoader__.load 手递结构）
+npm install        # @deepseek-ai/* 经 optionalDependencies 的 file: 链接到本地
+                   # deepseek-harness checkout（../../oss/deepseek-harness/…），
+                   # 缺失时自动跳过（他人机器上不影响）
+npm run typecheck  # tsc 双编译面（host + client 声明）
 npm test           # vitest：diff / guard 纯函数单测 + 真实 cordis Context 集成测试（43 个用例）
-npm run typecheck
+npm run build      # 作者全量构建：tsc → lib/（含 .d.ts）+ esbuild → lib/client.js
+npm run build:portable  # 自包含构建（prepare 用）：esbuild 打包 host 单文件 + client，
+                        # 无需任何 @deepseek-ai 类型——git 安装/打包时自动执行
 ```
 
 ## 安装
 
-```sh
-# 从本地 checkout（需先 build，lib/ 为 gitignore 产物）
-dsh plugin --profile web add /home/slev/workspace/projects/dsh-edit-approval
+三种方式任选；安装后需**重启 dsh web**（`--profile web`）生效。
 
-# 或从 GitHub 安装（author 需提供自包含 prepare 构建；用户需在 pnpm-workspace.yaml 中 allowBuilds）
-dsh plugin --profile web add github:SiriLee/dsh-edit-approval
+### 方式 1：本地 checkout（作者 / 贡献者）
+
+```sh
+cd dsh-edit-approval
+npm install      # 本机存在 deepseek-harness checkout 时自动链接其包用于类型检查/测试
+npm run build    # tsc 全量构建（含 .d.ts）
+dsh plugin --profile web add /path/to/dsh-edit-approval   # link: 安装
+```
+
+### 方式 2：GitHub 安装（其他使用者；推荐）
+
+```sh
+dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
+```
+
+首次会失败：pnpm 默认阻止 git 依赖执行构建脚本。按 CLI 提示把 `allowBuilds` 键
+写入 profile 的 `pnpm-workspace.yaml`（例如 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`），
+再重跑一次即可。之后 pnpm 会自动运行插件的 `prepare`（自包含 esbuild 构建，无需本机
+harness checkout），并安装到 profile 内。建议**固定 commit**（`#<sha>`），避免上游
+push 静默改变安装时执行的代码。
+
+### 方式 3：tarball / npm 发布（预构建产物，无需放行构建）
+
+```sh
+npm pack                                # 在插件仓库生成 dsh-edit-approval-0.1.0.tgz
+dsh plugin --profile web add ./dsh-edit-approval-0.1.0.tgz
+```
+
+包内已含预构建 `lib/`，`dsh plugin add` 不再运行任何构建脚本。发布到 npm 后可直接
+`dsh plugin --profile web add dsh-edit-approval`。
+
+## 验证效果
+
+### 1. 验证安装生效
+
+```sh
+# 配置层已组合（无需启动）
+dsh --profile web --dump-config | grep -A 3 'dsh-edit-approval'
+
+# 启动后浏览器客户端模块图含本插件（bundle 由 host 服务）
+curl -s http://127.0.0.1:3080/ | grep -o '"id":"dsh-edit-approval"'
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-edit-approval/client.js   # 200
+```
+
+### 2. 功能验证（审批面板）
+
+新开会话，让模型执行一次写操作（如 `write src/demo.ts`）：
+
+- **拒绝** → 工具返回「the user rejected tool "write"」，文件未写入，模型可自行调整；
+- **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问；
+- **总是允许** → 本次写入执行，该工具加入始终允许名单，之后同类工具不再询问（可随时
+  用 `/approval-always list` 查看、`/approval-always clear` 清除）。
+
+面板头部应显示 `write · src/demo.ts (create): N insertions, 0 deletions`，主体为
+`+`/`-` 前缀的红绿行 diff。
+
+### 3. 验证开关与名单命令
+
+```sh
+/approval-edit status          # 查看总开关
+/approval-edit off             # 关闭后写操作直接执行，不再询问
+/approval-edit on
+/approval-always edit          # 把 edit 加入始终允许名单
+/approval-always list
+/approval-always clear
+```
+
+### 4. 与权限预设联动
+
+将 `ctx.approval` 会话策略切为 `never`（如 `danger-full-access` 预设）后，插件的
+`ask` 会被确定性拒绝——即编辑一律不执行，插件不绕过任何既有决策。
+
+### 5. 自动化验证（开发者）
+
+```sh
+npm run typecheck && npm test    # 43 个用例：diff/guard 纯函数 + 真实 cordis Context 集成
 ```
 
 包声明 `dsh.bundle`（`cordis.patch.yml` 挂载 host 插件行）+ `dsh.client`（`exports["./client"]` 浏览器 bundle 自动入图），GitHub 仓库已打 `dsh-plugin` topic。
@@ -118,8 +194,9 @@ src/client/index.ts     client 插件：「总是允许」按钮注入（Mutatio
 tests/diff.spec.ts      diff 单测
 tests/guard.spec.ts     guard 单测
 tests/integration.spec.ts  真实 cordis Context + 桩服务的 host 集成测试
+scripts/build-portable.mjs  自包含 esbuild 构建（prepare 生命周期）
 cordis.patch.yml        bundle patch（插入插件行）
-package.json            dsh.bundle + dsh.client 声明、peerDependencies(@deepseek-ai/*)
+package.json            dsh.bundle + dsh.client 声明、peerDependencies(@deepseek-ai/*, optional)
 tsconfig.json / tsconfig.client.json    host / client 双编译面
 ```
 
