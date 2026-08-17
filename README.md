@@ -37,23 +37,13 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 
 ## 📸 Screenshots
 
-| Approval panel — red/green diff | Master switch in Settings → General |
+| Master switch in Settings → General | `/approval-edit status` result in chat |
 |:---:|:---:|
-| ![Approval panel showing the tool/file header and red/green line diff](assets/screenshots/approval-panel.png) | ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) |
+| ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) | ![Chat turn running the status command with its on/off result](assets/screenshots/status-command.png) |
 
-| `/approval-edit status` result in chat |
+| Approval panel — red/green line diff |
 |:---:|
-| ![Chat turn running the status command with its on/off result](assets/screenshots/status-command.png) |
-
-<!-- Screenshots to provide later — drop the PNGs into assets/screenshots/:
-  - approval-panel.png  — the web approval panel while a write/edit is pending:
-                         header line (`tool · file (op): N insertions, M
-                         deletions`) plus the red/green per-line diff body.
-  - settings-switch.png — Settings → General showing the "Edit approval"
-                         checkbox row (the plugin's master switch).
-  - status-command.png  — a chat turn running `/approval-edit status` and its
-                         "edit approval is on/off" result.
--->
+| ![Approval panel showing the tool/file header and red/green line diff](assets/screenshots/approval-panel.png) |
 
 ## How it works
 

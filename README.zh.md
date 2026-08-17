@@ -37,22 +37,13 @@
 
 ## 📸 截图
 
-| 审批面板——红绿 diff | Settings → General 总开关 |
+| Settings → General 总开关 | 聊天中执行 `/approval-edit status` |
 |:---:|:---:|
-| ![审批面板：工具/文件头部 + 红绿行级 diff](assets/screenshots/approval-panel.png) | ![设置页 General 下的编辑前审批开关](assets/screenshots/settings-switch.png) |
+| ![设置页 General 下的编辑前审批开关](assets/screenshots/settings-switch.png) | ![运行 status 命令及其 on/off 结果](assets/screenshots/status-command.png) |
 
-| 聊天中执行 `/approval-edit status` |
+| 审批面板——红绿行级 diff |
 |:---:|
-| ![运行 status 命令及其 on/off 结果](assets/screenshots/status-command.png) |
-
-<!-- 待补充截图——将 PNG 放入 assets/screenshots/：
-  - approval-panel.png  — 有 write/edit 待审批时弹出的审批面板：头部行
-                          （工具名 · 文件 (操作)：N insertions, M deletions）
-                          以及红绿逐行 diff 主体。
-  - settings-switch.png — Settings → General 中「编辑前审批」复选框行。
-  - status-command.png  — 聊天里执行 /approval-edit status 及其
-                          「edit approval is on/off」结果。
--->
+| ![审批面板：工具/文件头部 + 红绿行级 diff](assets/screenshots/approval-panel.png) |
 
 ## 工作原理
 
