@@ -98,10 +98,12 @@ npm install        # devDeps 全部来自 npm registry（@deepseek-ai/dsh-* 0.1.
                    # 不再需要本机 deepseek-harness checkout
 npm run typecheck  # tsc 双编译面（host + client 声明）
 npm test           # vitest：diff / guard 纯函数单测 + 真实 cordis Context 集成测试（43 个用例）
-npm run build      # 作者全量构建：tsc → lib/（含 .d.ts）+ scripts/build-client.mjs → lib/client.js
-npm run build:portable  # 自包含构建（prepare 用）：esbuild 打包 host 单文件 + client，
-                        # 无需任何 @deepseek-ai 类型——git 安装/打包时自动执行
+npm run build      # 全量构建：tsc → lib/（含 .d.ts）+ scripts/build-client.mjs → lib/client.js
+npm run build:portable  # 轻量构建（可选）：esbuild 打包 host 单文件 + client，无需类型检查
 ```
+
+`prepare` 生命周期运行**全量构建**（`npm run build`）：git 安装与 `npm pack`/`npm publish`
+始终得到完整的 `lib/`（含 `.d.ts`）与 `LICENSE`，产物确定且自洽。
 
 ## 安装
 
@@ -135,8 +137,20 @@ npm pack                                # 在插件仓库生成 dsh-edit-approva
 dsh plugin --profile web add ./dsh-edit-approval-0.1.0.tgz
 ```
 
-包内已含预构建 `lib/`，`dsh plugin add` 不再运行任何构建脚本。发布到 npm 后可直接
+`npm pack` 会先运行 `prepare`（全量构建），包内始终包含**完整预构建 `lib/`（含 `.d.ts`）与 `LICENSE`**，
+`dsh plugin add` 不再运行任何构建脚本。发布到 npm 后可直接
 `dsh plugin --profile web add dsh-edit-approval`。
+
+### 发布到 npm（可选）
+
+```sh
+npm run typecheck && npm test && npm run build   # 发布前全量验证
+npm publish                                       # tarball 内容与 `npm pack` 一致（含 lib/、LICENSE、README）
+```
+
+包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
+`engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
+发布后建议在 GitHub 仓库保留 `dsh-plugin` topic 以便发现。
 
 ## 验证效果
 
