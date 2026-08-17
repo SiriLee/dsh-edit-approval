@@ -1,0 +1,70 @@
+{
+  "name": "dsh-edit-approval",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once, reject, or always allow (Claude Code behavior).",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "npm run build:host && npm run build:client",
+    "build:host": "tsc -p tsconfig.json",
+    "build:client": "tsc -p tsconfig.client.json && esbuild src/client/index.ts --bundle --platform=browser --format=cjs --outfile=lib/client.js --sourcemap --banner:js=\"window.__ModuleLoader__.load({ id: \\\"dsh-edit-approval\\\", factory: (require) => { var module = { exports: {} }; var exports = module.exports;\" --footer:js=\"return module.exports; } });\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-fs": "*",
+    "@deepseek-ai/dsh-sandbox": "*",
+    "@deepseek-ai/dsh-commands": "*",
+    "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/dsh-client-runtime": "*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "file:../../oss/deepseek-harness/vendor/cordis",
+    "@deepseek-ai/schemastery": "file:../../oss/deepseek-harness/vendor/schemastery",
+    "@deepseek-ai/dsh-tools": "file:../../oss/deepseek-harness/packages/core/tools",
+    "@deepseek-ai/dsh-fs": "file:../../oss/deepseek-harness/packages/fs/fs",
+    "@deepseek-ai/dsh-sandbox": "file:../../oss/deepseek-harness/packages/sandbox/sandbox",
+    "@deepseek-ai/dsh-commands": "file:../../oss/deepseek-harness/packages/interaction/commands",
+    "@deepseek-ai/dsh-settings": "file:../../oss/deepseek-harness/packages/settings/settings",
+    "@deepseek-ai/dsh-client-runtime": "file:../../oss/deepseek-harness/packages/client/runtime",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
