@@ -16,7 +16,7 @@
 
 // Type-only: both are module-table words, never inlined; the runtime code
 // below touches only the DOM and the session face.
-import type { ClientContext, SessionFace, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the settings slot declaration ('settings.general.item') and
 // the settingsScope Context merge (`ctx.settingsScope.bind`).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -169,13 +169,13 @@ function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
 }
 
 /**
- * Wait until the settings scope reports `enabled === expected`. The toggle
- * writes through the host `/approval-edit` command (reliable), and the host's
- * `settings.update` is pushed back to this scope; resolve once it lands, or
- * with the current value on timeout so the row never sticks on an optimistic
- * lie.
+ * Wait until a `/approval-edit` command settles at/after `base` in the session
+ * snapshot — the command node's outcome kind, which records what the command
+ * actually committed (success/error). Resolves `true` on success, `false` on
+ * error, `null` on timeout. The command handler returns no text, so we key off
+ * the outcome kind, not a rendered result string.
  */
-function waitForEnabled(host: SettingsScope<EditApprovalSettings>, expected: boolean): Promise<boolean | null> {
+function waitForCommandOutcome(session: SessionFace, base: number): Promise<boolean | null> {
   return new Promise((resolve) => {
     let settled = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -187,11 +187,19 @@ function waitForEnabled(host: SettingsScope<EditApprovalSettings>, expected: boo
       resolve(value)
     }
     const check = (): void => {
-      const value = host.getSnapshot().value?.enabled
-      if (value === expected) settle(value ?? null)
+      const snapshot = session.getSnapshot()
+      for (let index = base; index < snapshot.chat.order.length; index += 1) {
+        const node = snapshot.chat.nodes.get(snapshot.chat.order[index]!)
+        if (node?.kind !== 'command') continue
+        const data = node.data as { name?: string; outcome?: { kind?: string } }
+        if (data.name === 'approval-edit' && data.outcome !== undefined) {
+          settle(data.outcome.kind === 'success')
+          return
+        }
+      }
     }
-    const unsubscribe = host.subscribe(check)
-    timer = setTimeout(() => settle(host.getSnapshot().value?.enabled ?? null), 4000)
+    const unsubscribe = session.subscribe(check)
+    timer = setTimeout(() => settle(null), 4000)
     check()
   })
 }
@@ -232,9 +240,12 @@ export function apply(ctx: ClientContext): void {
           const session = currentSessionOf(ctx)
           if (session === undefined) return null
           // Write through the host command (the handler returns no text, so
-          // nothing surfaces in the chat); then settle on the pushed-back value.
+          // nothing echoes into the chat); confirm via the command outcome,
+          // which is what the command actually committed.
+          const base = session.getSnapshot().chat.order.length
           await session.command(`/approval-edit ${next ? 'on' : 'off'}`)
-          return await waitForEnabled(host, next)
+          const ok = await waitForCommandOutcome(session, base)
+          return ok ? next : null
         },
       }),
     }, EditApprovalRow))
