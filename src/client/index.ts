@@ -17,8 +17,8 @@
 // Type-only: both are module-table words, never inlined; the runtime code
 // below touches only the DOM and the session face.
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
-// Type-only: pulls the settings slot declaration ('settings.general.item').
+// Type-only: pulls the settings slot declaration ('settings.general.item') and
+// the settingsScope Context merge (`ctx.settingsScope.bind`).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale service merge (`ctx.locale`) and the slot
 // declaration; runtime copy comes from the locale dictionary below.
@@ -36,8 +36,17 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
-/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy). */
-export const inject = ['sessions', 'slots', 'locale']
+/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy), settingsScope (the row state). */
+export const inject = ['sessions', 'slots', 'locale', 'settingsScope']
+
+/** Settings shape of the `edit-approval` namespace (mirrors the host Config). */
+interface EditApprovalSettings {
+  enabled: boolean
+  tools: string[]
+  minDiffLines: number
+  includeCreate: boolean
+  includeDelete: boolean
+}
 
 /** The approval panel root anchor (set by ApprovalPanel.tsx). */
 const PANEL_SELECTOR = '[data-approval-key]'
@@ -154,77 +163,6 @@ function scan(ctx: ClientContext): void {
 }
 
 /**
- * Read the latest `/approval-edit` command outcome ("... is on/off") at or
- * after `fromIndex` in the chat order from the session snapshot, or null when
- * none has settled yet. The index baseline lets a caller wait for a FRESH
- * outcome instead of the stale one from a command it just issued.
- */
-function approvalEditStatus(session: SessionFace, fromIndex = 0): boolean | null {
-  let last: string | undefined
-  const snapshot = session.getSnapshot()
-  for (let index = fromIndex; index < snapshot.chat.order.length; index += 1) {
-    const key = snapshot.chat.order[index]!
-    const node = snapshot.chat.nodes.get(key)
-    if (node?.kind !== 'command') continue
-    const command = node.data as { name?: string; outcome?: { kind?: string; text?: string } }
-    if (command.name === 'approval-edit' && command.outcome?.text !== undefined) {
-      last = command.outcome.text
-    }
-  }
-  if (last === undefined) return null
-  // Accepts both the status wording ("... is on") and the toggle wording
-  // ("... turned on"); both commands' success texts end in " on" / " off".
-  return /(?:is|turned) on$/.test(last)
-}
-
-/** Resolve the current session face (the settings page opens within one). */
-function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
-  const id = ctx.sessions.list.getSnapshot().current
-  return id === undefined ? undefined : ctx.sessions.binding(id)?.session
-}
-
-/**
- * Wait until an approval-edit command outcome at/after `base` (the chat order
- * length captured BEFORE dispatching the command) settles in the session
- * snapshot. Settling on the command's own baselined outcome guarantees we
- * read what that command committed — never a stale earlier outcome. Resolves
- * `null` on timeout.
- */
-async function waitForApprovalEditOutcome(
-  session: SessionFace,
-  base: number,
-  timeoutMs = 4000,
-): Promise<boolean | null> {
-  return await new Promise<boolean | null>((resolve) => {
-    let settled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const settle = (value: boolean | null): void => {
-      if (settled) return
-      settled = true
-      if (timer !== undefined) clearTimeout(timer)
-      unsubscribe()
-      resolve(value)
-    }
-    const check = (): void => {
-      const value = approvalEditStatus(session, base)
-      if (value !== null) settle(value)
-    }
-    const unsubscribe = session.subscribe(check)
-    timer = setTimeout(() => settle(null), timeoutMs)
-    check()
-  })
-}
-
-/** Run `/approval-edit status` and wait for its (baselined) command outcome. */
-async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | null> {
-  const session = currentSessionOf(ctx)
-  if (session === undefined) return null
-  const base = session.getSnapshot().chat.order.length
-  await session.command('/approval-edit status')
-  return await waitForApprovalEditOutcome(session, base)
-}
-
-/**
  * Mount the browser half: inject the diff styles, register the
  * Settings → General master-switch row, and observe approval panels to
  * enhance them. Disposal unwinds everything.
@@ -235,16 +173,18 @@ export function apply(ctx: ClientContext): void {
   // language preference. Registered once for the plugin's lifetime.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-edit-approval: locale dictionaries')
 
+  // The row state reads and writes through the settings scope directly (the
+  // same route the harness's own Language row uses), so toggling never emits
+  // a `/approval-edit` command into the chat — no per-session status text.
+  const host = ctx.settingsScope.bind<EditApprovalSettings>({ namespace: 'edit-approval' })
+
   ctx.effect(function* () {
     const style = document.createElement('style')
     style.dataset.plugin = 'dsh-edit-approval'
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}`
     document.head.appendChild(style)
 
-    // Settings → General row: the edit-approval master switch. Status and
-    // writes go through the host `/approval-edit` command — the route proven
-    // reliable — instead of the client settingsScope RPC (which could not
-    // persist writes for this namespace in this deployment). `locale: NS`
+    // Settings → General row: the edit-approval master switch. `locale: NS`
     // synthesizes the `t` seat on the row's props.
     const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
@@ -252,15 +192,12 @@ export function apply(ctx: ClientContext): void {
       order: 30,
       locale: NS,
       inject: () => ({
-        getStatus: () => approvalEditStatusCommand(ctx),
-        // Resolves with the value the host committed: the toggle command's
-        // own baselined outcome, not a later guess.
+        getStatus: () => Promise.resolve(host.getSnapshot().value?.enabled ?? null),
+        // `set` resolves after the write settles (or, on a rejected write,
+        // reloads host state), then the snapshot reflects the committed value.
         toggle: async (next: boolean): Promise<boolean | null> => {
-          const session = currentSessionOf(ctx)
-          if (session === undefined) return null
-          const base = session.getSnapshot().chat.order.length
-          await session.command(`/approval-edit ${next ? 'on' : 'off'}`)
-          return await waitForApprovalEditOutcome(session, base)
+          await host.set('enabled', next)
+          return host.getSnapshot().value?.enabled ?? null
         },
       }),
     }, EditApprovalRow))
