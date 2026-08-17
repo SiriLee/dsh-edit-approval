@@ -27,6 +27,21 @@ export async function buildClientBundle() {
     platform: 'browser',
     format: 'cjs',
     target: 'es2022',
+    // React JSX (react + react/jsx-runtime are platform modules, external).
+    jsx: 'automatic',
+    // Platform modules resolve through the loader module table at runtime —
+    // inlining them would duplicate React/cordis instances and break hooks
+    // isolation. Mirrors the harness CLIENT_EXTERNALS list.
+    external: [
+      'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client',
+      '@deepseek-ai/cordis',
+      '@deepseek-ai/dsh-client-ui-slots',
+      '@deepseek-ai/dsh-client-web-react',
+      '@deepseek-ai/dsh-client-ui-primitives',
+      '@deepseek-ai/dsh-client-ui-attachment',
+      '@deepseek-ai/dsh-client-schema-form',
+      '@deepseek-ai/dsh-client-runtime/client',
+    ],
     sourcemap: true,
     logLevel: 'info',
     banner: { js: CLIENT_BANNER },

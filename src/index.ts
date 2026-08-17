@@ -159,6 +159,19 @@ export function apply(ctx: Context, config: Config): void {
       if (!live.enabled) return next()
       if (!live.tools.includes(exec.name)) return next()
       if (live.alwaysAllow.includes(exec.name)) return next()
+      // A session on the deterministic `never` policy (e.g. the
+      // danger-full-access preset) intends FULL access without prompting:
+      // every `ask` this plugin emits would be auto-rejected by the approval
+      // service, silently breaking edits. Delegate instead — the sandbox (or
+      // whatever else) keeps enforcing; this plugin just stops asking. The
+      // effective policy folds the session override over the service config.
+      if (exec.agent !== undefined) {
+        const approval = scope.get('approval') as
+          | { overrideOf?(session: unknown): string | undefined; config?: { policy?: string } }
+          | undefined
+        const policy = approval?.overrideOf?.(exec.agent.session) ?? approval?.config?.policy ?? 'ask'
+        if (policy === 'never') return next()
+      }
       const args = asRecord(exec.arguments)
       if (args === undefined) return next()
       if (exec.name === 'str_replace_editor' && args.command === 'view') return next()

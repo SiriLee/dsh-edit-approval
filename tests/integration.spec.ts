@@ -53,7 +53,7 @@ const SETTINGS_DEFAULTS: Record<string, unknown> = {
 }
 
 /** Mount the host plugin on a bare cordis Context with stub services. */
-async function mount(): Promise<Harness> {
+async function mount(options: { approvalPolicy?: 'ask' | 'never' } = {}): Promise<Harness> {
   const ctx = new Context()
   const files = new Map<string, string>()
   const commands: Harness['commands'] = []
@@ -78,6 +78,14 @@ async function mount(): Promise<Harness> {
       return settings
     },
   })
+  // The approval service double: session override with the configured default,
+  // mirroring how the plugin reads the effective policy.
+  if (options.approvalPolicy !== undefined) {
+    ctx.provide('approval', {
+      overrideOf: () => options.approvalPolicy,
+      config: { policy: options.approvalPolicy },
+    })
+  }
 
   const fiber = ctx.plugin(plugin as never)
   // The dynamic ctx.inject callback registers the listener and commands on a
@@ -104,6 +112,23 @@ function preExecute(h: Harness, name: string, args: Record<string, unknown>): Pr
   )
 }
 
+/** Dispatch one tool call with a caller agent (session policy lookups need one). */
+function preExecuteAsAgent(h: Harness, name: string, args: Record<string, unknown>): Promise<PreToolDecision> {
+  const exec = {
+    callId: 'c-agent',
+    name,
+    arguments: args,
+    agent: { id: 'a1', session: { header: { cwd: '/workspace' } } },
+    signal: new AbortController().signal,
+  }
+  return h.ctx.waterfall(
+    h.ctx,
+    'tools/pre-execute',
+    exec as never,
+    () => Promise.resolve<PreToolDecision>({ kind: 'allow' }),
+  )
+}
+
 describe('host plugin integration (bare cordis context + stub services)', () => {
   it('asks for an edit that changes an existing file', async () => {
     const h = await mount()
@@ -116,6 +141,31 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
         expect(decision.reason).toContain('-before')
         expect(decision.reason).toContain('+after')
       }
+    } finally {
+      await h.dispose()
+    }
+  })
+
+  it('passes through under the never policy instead of auto-rejecting edits', async () => {
+    // Full access (danger-full-access preset) intends no prompting: an `ask`
+    // here would be deterministically rejected by the approval service and
+    // silently break every edit. The plugin must delegate.
+    const h = await mount({ approvalPolicy: 'never' })
+    try {
+      h.files.set('src/a.ts', 'before\nunchanged')
+      const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
+      expect(decision).toEqual({ kind: 'allow' })
+    } finally {
+      await h.dispose()
+    }
+  })
+
+  it('still asks under the ask policy with a caller agent', async () => {
+    const h = await mount({ approvalPolicy: 'ask' })
+    try {
+      h.files.set('src/a.ts', 'before\nunchanged')
+      const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
+      expect(decision.kind).toBe('ask')
     } finally {
       await h.dispose()
     }

@@ -29,7 +29,10 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 
 ### 3. 与既有权限体系的关系
 
-- 插件只对已进入 `tools/pre-execute` 的写类工具生效；`ctx.approval` 会话策略（`ask`/`never`）照常生效——预设为 `never` 时确定性拒绝，插件行为与权限预设联动，不绕过任何既有决策。
+- 插件只对已进入 `tools/pre-execute` 的写类工具生效；`ctx.approval` 会话策略（`ask`/`never`）**联动**：
+  - `ask`（如 `workspace-write` 预设）：正常拦截并弹出审批面板；
+  - `never`（如 `danger-full-access` 预设，意图"全权、不打扰"）：插件**直接放行**，不发出 `ask`
+    （否则 harness 会把每次询问确定性转为拒绝，导致全权会话下所有编辑被静默拦截）。
 - 不改变沙箱模式；`read-only` 预设下写操作本就失败，插件不额外拦截。
 
 ## 机制（host 端，全部公开 API）
