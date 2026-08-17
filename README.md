@@ -2,7 +2,7 @@
 
 DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝 / 对本命令总是同意**；可随时关闭（用户开关）。
 
-> 状态：**已实现并发布 npm（v0.1.1，GitHub Actions Trusted Publishing + Sigstore provenance）**。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。
+> 状态：**已实现并发布 npm（v0.1.4，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝/总是允许（按钮居中）+ 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
 
 ## 背景与定位
 
@@ -24,7 +24,7 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 ### 2. 用户开关
 
 - 总开关（`enabled`）：随时开启/关闭整个插件（关闭后编辑直接执行，无审批）；
-- 设置方式：设置页开关（插件注册 `edit-approval` settings 命名空间，UI 自动渲染；**优先**）+ 命令 `/approval-edit on|off|status`（辅助）；
+- 设置方式：设置页开关（Settings → General「编辑前审批」，经 host 命令 `/approval-edit` 读写）+ 命令 `/approval-edit on|off|status`（两者同源等价）；
 - 名单管理：`/approval-always <tool>`（添加）、`/approval-always list`、`/approval-always clear`（名单持久化在 settings 文档中，重启不丢）。
 
 ### 3. 与既有权限体系的关系
@@ -54,7 +54,8 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
 - 「总是允许」第三按钮：注入到现有审批面板 `[data-approval-key]` 容器内的操作行（与「拒绝/允许一次」并排），仅依赖稳定 DOM 锚点，无新页面、无新弹窗、无 React。
 - 点击「总是允许」= 两步：①模拟点击面板既有「允许一次」按钮（本次放行）；②经 `session.command('/approval-always <tool>')` 把工具加入名单（工具名从运行时 `session.getSnapshot().pending` 中按 `data-approval-key` 匹配到的 approval payload 的 `toolName` 获取）。
 - 面板出现/消失由 `MutationObserver` 观察 `[data-approval-key]` 处理；按钮文案按浏览器语言显示「总是允许 / Always allow」。
-- **换行补偿**：审批面板 `.headline` 的 CSS 无 `white-space: pre-wrap`，HTML 会把 reason 里的 `\n` 折叠成空格，行级 diff 会挤成一行。插件注入一条按稳定属性锚点定位的样式（`[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`）恢复换行；上游若修复此样式则本规则自然冗余无害。
+- **diff 呈现（红绿行）**：面板 headline 的 reason 是纯文本（CSS 无法按行着色），插件将其重建为逐行 DOM——头行（工具·文件·统计）保留，变更行红绿显示（`+` 绿 / `-` 红，等宽字体），灰色上下文行折叠为 `…` 省略标记（大编辑不刷屏）；host 的 reason 文本保持完整，仅 web 端展示时过滤。
+- **换行补偿**：另注入一条 pre-wrap 样式（`[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`），兜底 reason 文本被 HTML 折叠换行的问题；上游若修复此样式则自然冗余无害。
 - **生命周期**：所有副作用（observer、样式、待触发的 DOMContentLoaded 钩子）注册为单个 `ctx.effect`，插件卸载 / HMR 时完整清理。
 
 ## 配置项
@@ -150,7 +151,7 @@ dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
 
 ### 发布到 npm（GitHub Actions Trusted Publishing，已上线）
 
-已发布版本：`0.1.0`（本地 2FA）、`0.1.1`（CI OIDC + Sigstore provenance）。后续发版走 CI：
+已发布版本：`0.1.0`（本地 2FA）、`0.1.1`/`0.1.2`/`0.1.3`/`0.1.4`（CI OIDC + Sigstore provenance）。后续发版走 CI：
 
 ```sh
 npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
