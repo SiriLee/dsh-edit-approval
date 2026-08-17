@@ -25,6 +25,9 @@ import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
+/** Required service: the sessions registry (pending approvals live in session snapshots). */
+export const inject = ['sessions']
+
 /** The approval panel root anchor (set by ApprovalPanel.tsx). */
 const PANEL_SELECTOR = '[data-approval-key]'
 
