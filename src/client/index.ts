@@ -240,8 +240,24 @@ export function apply(ctx: ClientContext): void {
         getSnapshot: () => scope.getSnapshot().value?.enabled ?? true,
         subscribe: (cb: () => void) => scope.subscribe(cb),
         toggle: () => {
-          const next = !(scope.getSnapshot().value?.enabled ?? true)
-          void scope.set('enabled', next)
+          // Load first so the write carries the LATEST revision: the host
+          // command path (/approval-always, /approval-edit) also writes this
+          // namespace, and a stale expectedRevision makes the host reject the
+          // mutate with a conflict. Load again after the write so the row
+          // reflects the host value even if the document-updated event bridge
+          // did not reach this page. (load is on the concrete controller, not
+          // the SettingsScope contract — hence the cast.)
+          const refresh = (scope as unknown as { load(): Promise<void> }).load
+          void (async () => {
+            try {
+              await refresh()
+              const next = !(scope.getSnapshot().value?.enabled ?? true)
+              await scope.set('enabled', next)
+              await refresh()
+            } catch (error) {
+              console.warn(`dsh-edit-approval: settings toggle failed: ${String(error)}`)
+            }
+          })()
         },
       }),
     }, EditApprovalRow))
