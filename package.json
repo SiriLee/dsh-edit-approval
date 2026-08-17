@@ -1,7 +1,7 @@
 {
   "name": "dsh-edit-approval",
   "version": "0.1.6",
-  "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once, reject, or always allow (Claude Code behavior).",
+  "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once or reject (Claude Code behavior).",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -35,7 +35,8 @@
     "src",
     "cordis.patch.yml",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "README.zh.md"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

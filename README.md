@@ -1,60 +1,153 @@
 # dsh-edit-approval
 
-DeepSeek Harness 插件：**编辑前审批**——`write` / `edit` / `str_replace_editor` 执行前显示**红绿行级 diff**（Claude Code 行为），用户选择：**同意 / 拒绝**；可随时关闭（用户开关）。
+[简体中文](README.zh.md)
 
-> 状态：**已实现并发布 npm（v0.1.5，GitHub Actions Trusted Publishing + Sigstore provenance）**。当前功能：`write`/`edit`/`str_replace_editor` 拦截 + 红绿行级 diff（只显示变更行，省略标记）+ 同意/拒绝 + 设置页总开关（host 命令通道）。交互以 Claude Code 的 edit approval 为参考，并贴合 dsh Web 实际 UI（复用现有审批面板与 DOM 锚点，纯插件、不改仓库核心）。审批快捷键（Enter/Esc）已拆分为独立插件二期。
+Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): intercepts `write` / `edit` / `str_replace_editor` and shows a red/green line-level diff **before** the file is touched — **approve once or reject**, with a master switch in Settings → General.
 
-## 背景与定位
+> **Status:** published to npm (`v0.1.6`) via GitHub Actions Trusted Publishing + Sigstore provenance. Targets the web profile (`dsh --profile web`).
 
-社区编辑审查类插件是**事后**路线（[`dsh-change-review`](https://github.com/cirelir/dsh-change-review) 跟踪并渲染 diff、可回滚，但不拦截执行）；审批类插件（[`dsh-smart-approval`](https://github.com/TingRuDeng/dsh-smart-approval)、[`dsh-auto-approval-plugin`](https://github.com/StyxNether/dsh-auto-approval-plugin)）调整的是审批**模式/权限档位**，不针对单个编辑。「编辑前逐 diff 审批」在社区是空白。
+[![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
+[![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
 
-## 交互设计（Claude Code 参考）
+## Table of contents
 
-### 1. 每次编辑前：红绿 diff + 二选一
+- [✨ Features](#-features)
+- [📸 Screenshots](#-screenshots)
+- [How it works](#how-it-works)
+- [Approval policy interaction](#approval-policy-interaction)
+- [Install](#-install)
+- [Configure](#configure)
+- [Behavior details & limitations](#behavior-details--limitations)
+- [Not included](#not-included)
+- [Compatibility](#compatibility)
+- [Development](#development)
+- [Publishing](#publishing)
+- [License](#license)
 
-Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**，先弹出审批面板：
+## ✨ Features
 
-- 面板头部：工具名 + 目标文件 + 变更统计（如 `edit · src/foo.ts (modify): 2 insertions, 1 deletion`）；
-- 主体：**红绿行级 diff**（`+` 新增行、`-` 删除行、` ` 上下文），与 Claude Code 的 edit approval 一致；
-- 操作二选一：
-  - **同意**（允许一次）——本次编辑执行
-  - **拒绝**——本次编辑不执行，模型收到「用户拒绝了 write」反馈，可自行调整
+| Feature | Description |
+| --- | --- |
+| Pre-write approval | Intercepts `write` / `edit` / `str_replace_editor` on the `tools/pre-execute` seam and asks before any file is modified |
+| Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; rendered per-line in the approval panel, with unchanged runs collapsed to `…` |
+| Approve once / reject | Two actions, mirroring the Claude Code edit-approval flow; rejection reports back to the model |
+| Master switch | Settings → General "Edit approval" row, backed by the `/approval-edit on\|off\|status` host command (same source) |
+| Policy-aware | Respects the session approval policy: `ask` intercepts, `never` (full access) runs edits through untouched |
+| Thresholds | `minDiffLines`, `includeCreate`, `includeDelete` for fine-grained control |
 
-### 2. 用户开关
+## 📸 Screenshots
 
-- 总开关（`enabled`）：随时开启/关闭整个插件（关闭后编辑直接执行，无审批）；
-- 设置方式：设置页开关（Settings → General「编辑前审批」，经 host 命令 `/approval-edit` 读写）+ 命令 `/approval-edit on|off|status`（两者同源等价）；
+| Approval panel — red/green diff | Master switch in Settings → General |
+|:---:|:---:|
+| ![Approval panel showing the tool/file header and red/green line diff](assets/screenshots/approval-panel.png) | ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) |
 
-### 3. 与既有权限体系的关系
+| `/approval-edit status` result in chat |
+|:---:|
+| ![Chat turn running the status command with its on/off result](assets/screenshots/status-command.png) |
 
-- 插件只对已进入 `tools/pre-execute` 的写类工具生效；`ctx.approval` 会话策略（`ask`/`never`）**联动**：
-  - `ask`（如 `workspace-write` 预设）：正常拦截并弹出审批面板；
-  - `never`（如 `danger-full-access` 预设，意图"全权、不打扰"）：插件**直接放行**，不发出 `ask`
-    （否则 harness 会把每次询问确定性转为拒绝，导致全权会话下所有编辑被静默拦截）。
-- 不改变沙箱模式；`read-only` 预设下写操作本就失败，插件不额外拦截。
+<!-- Screenshots to provide later — drop the PNGs into assets/screenshots/:
+  - approval-panel.png  — the web approval panel while a write/edit is pending:
+                         header line (`tool · file (op): N insertions, M
+                         deletions`) plus the red/green per-line diff body.
+  - settings-switch.png — Settings → General showing the "Edit approval"
+                         checkbox row (the plugin's master switch).
+  - status-command.png  — a chat turn running `/approval-edit status` and its
+                         "edit approval is on/off" result.
+-->
 
-## 机制（host 端，全部公开 API）
+## How it works
 
-### 4. 拦截与审批路由
+The plugin listens on the `tools/pre-execute` waterfall (the seam the harness
+runs before a tool executes) and matches a whitelist of registered tool names:
+`write`, `edit`, `str_replace_editor`. For each intercepted call it:
 
-- 监听 `tools/pre-execute`（waterfall seam），匹配白名单工具（注册名：`write` / `edit` / `str_replace_editor`；注意 `str_replace_editor` 的注册名带下划线，与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同）。
-- 执行前经 `ctx.fs` 读取目标文件当前内容（沿用 fs 工具的会话 cwd 规则），对工具参数计算**拟写入内容**（`write` 全文、`edit` 唯一替换/`replace_all`、`str_replace` 唯一替换、`insert` 按行插入、`create` 用 `file_text`），再与当前内容计算**行级 diff**（LCS 对齐，超大文件回退为整文件替换）。
-- 返回 `{ kind: 'ask', reason: '<工具名与文件与统计> \n <diff 文本>' }`：harness 内部 `serviceAsk` 自动调用 `ctx.approval.request(...)` 并把 `reason` 路由到 Web 审批面板 headline（已验证 `ApprovalPanel.tsx` headline 渲染 reason、无长度上限、body 可滚动）——**host 端零 UI 改动**。
-- `allowed-once` → 工具继续；`rejected` → 工具 deny（不执行）。非询问情形一律 `return next()` 委托后续监听器，不短路其他策略。
+1. **Resolves the target** through `ctx.fs`, applying the same session-cwd rule
+   the fs tools use (a relative `..` path canonicalizes the cwd).
+2. **Reads the current content** and reconstructs the proposed content from the
+   tool's arguments, mirroring each tool's semantics:
+   - `write` — full text; `edit` — single unique replace (or `replace_all`);
+   - `str_replace_editor` — `str_replace` unique replace, `insert` line
+     insertion, `create` uses `file_text`.
+3. **Computes a line-level LCS diff** between current and proposed content.
+   Equal head/tail runs are trimmed first so a one-line edit in a large file
+   stays a one-line diff; pathological files fall back to a coarse whole-file
+   diff.
+4. **Returns `{ kind: 'ask', reason }`** with a header line (`tool · file
+   (op): N insertions, M deletions`) plus the diff text. The harness's own
+   `serviceAsk` routes that through `ctx.approval` into the web approval panel
+   — the host needs **zero UI changes**. `allowed-once` proceeds, `rejected`
+   denies the call; every other case delegates via `next()`.
 
-## 客户端实现要点（纯插件，无源码补丁）
+The browser half (`dsh.client`) rebuilds the panel's plain-text headline into
+red/green per-line blocks, adds a `white-space: pre-wrap` compensation for the
+headline's CSS, and registers the Settings → General master-switch row. All side
+effects live in a single `ctx.effect` (torn down on plugin unload / HMR), and a
+per-animation-frame `MutationObserver` enhances approval panels as they appear.
 
-- 面板出现/消失由 `MutationObserver` 观察 `[data-approval-key]` 处理。
-- **diff 呈现（红绿行）**：面板 headline 的 reason 是纯文本（CSS 无法按行着色），插件将其重建为逐行 DOM——头行（工具·文件·统计）保留，变更行红绿显示（`+` 绿 / `-` 红，等宽字体），灰色上下文行折叠为 `…` 省略标记（大编辑不刷屏）；host 的 reason 文本保持完整，仅 web 端展示时过滤。
-- **换行补偿**：另注入一条 pre-wrap 样式（`[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`），兜底 reason 文本被 HTML 折叠换行的问题；上游若修复此样式则自然冗余无害。
-- **生命周期**：所有副作用（observer、样式、待触发的 DOMContentLoaded 钩子）注册为单个 `ctx.effect`，插件卸载 / HMR 时完整清理。
+## Approval policy interaction
 
-## 配置项
+The harness's session approval policy (`ask` / `never`) keeps applying:
 
-运行时配置统一由 settings 命名空间 `edit-approval` 提供：**schema 默认 < cordis 行 config < 用户设置页（持久化）**。cordis 行默认不带 config（见 `cordis.patch.yml`），如需经 profile patch 调整部署默认值，可覆盖该行：
+| Session policy | Plugin behavior |
+| --- | --- |
+| `ask` (e.g. `workspace-write` preset) | Intercepts and shows the approval panel |
+| `never` (e.g. `danger-full-access` preset) | Delegates — edits run without prompting, the sandbox keeps enforcing |
+
+Under `never`, every `ask` this plugin emitted would be deterministically
+rejected by the approval service, silently breaking every edit in a full-access
+session. The plugin therefore stops asking and lets the sandbox enforce. It
+never expands access or changes the sandbox mode.
+
+## 📦 Install
+
+Published to npm — the registry path is the recommended one. **Restart dsh web
+(`--profile web`) after installing.**
+
+### Option A: registry (recommended)
+
+```sh
+dsh plugin --profile web add dsh-edit-approval
+```
+
+### Option B: local checkout (authors / contributors)
+
+```sh
+cd dsh-edit-approval
+npm install      # devDeps come from the npm registry; no harness checkout needed
+npm run build    # full tsc build, including .d.ts
+dsh plugin --profile web add /path/to/dsh-edit-approval   # link install
+```
+
+### Option C: GitHub (pin a commit for reproducibility)
+
+```sh
+dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
+```
+
+First run fails: pnpm blocks git dependencies from running build scripts. Follow
+the CLI hint to add an `allowBuilds` key to the profile's `pnpm-workspace.yaml`
+(e.g. `$DSH_HOME/profiles/web/pnpm-workspace.yaml`), then retry. pnpm then runs
+the plugin's `prepare` (full build) and installs it into the profile.
+
+### Option D: tarball (offline / self-hosted registry)
+
+```sh
+npm pack                                   # produces dsh-edit-approval-<version>.tgz
+dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
+```
+
+`npm pack` runs `prepare`, so the tarball always carries a prebuilt `lib/`
+(including `.d.ts`) and the `LICENSE`; `dsh plugin add` runs no build scripts.
+
+## Configure
+
+Runtime configuration lives in the `edit-approval` settings namespace, layered
+as **schema defaults < cordis row config < user settings page (persisted)**.
+The cordis row ships without config on purpose; a profile patch overrides
+deployment defaults by restating only the keys it changes:
 
 ```yaml
-# 例：profile 的 cordis.patch.yml
+# profile's cordis.patch.yml
 - id: dsh-edit-approval
   name: dsh-edit-approval
   config:
@@ -62,198 +155,92 @@ Agent 调用 `write` / `edit` / `str_replace_editor` 时，**不直接落盘**�
     includeCreate: false
 ```
 
-| 键 | 默认 | 说明 |
-|---|---|---|
-| `enabled` | `true` | 总开关（用户可关） |
-| `tools` | `['write','edit','str_replace_editor']` | 拦截白名单（注册工具名） |
-| `minDiffLines` | `0` | 变更行数**低于**此值不询问（放行小改动） |
-| `includeCreate` | `true` | 新建文件是否询问 |
-| `includeDelete` | `true` | 清空/删除是否询问 |
+| Key | Default | Description |
+| --- | --- | --- |
+| `enabled` | `true` | Master switch (users can turn it off) |
+| `tools` | `['write','edit','str_replace_editor']` | Whitelist of intercepted registered tool names |
+| `minDiffLines` | `0` | Ask only when the change touches **at least** this many lines; smaller changes pass silently |
+| `includeCreate` | `true` | Whether creating a new file asks for approval |
+| `includeDelete` | `true` | Whether clearing/emptying a file asks for approval |
 
-## 边界与已知限制
+## Behavior details & limitations
 
-- 只拦截写类**工具**；bash/pwsh 命令内的文件修改不在本期范围。
-- diff 以文本形式呈现在审批面板（`+`/`-` 行标记），非交互式逐行选择；「部分应用」不做。
-- `str_replace_editor` 的 `create` 命中已存在文件、`old_str`/`old_string` 非唯一或不存在等**工具自身会失败**的情形，插件不询问（放行后由工具报错）。空 `old_string` 的 `edit` 预览与实际工具行为有偏差（插件视为 not-found 放行；偏差方向安全，不误拦截）。
-- 已记录的取舍：按钮文案按浏览器语言（`navigator.language`）而非 dsh `ctx.locale`（自包含 bundle 的有意简化）；`peerDependencies` 大多声明为 `"*"`（规避 pnpm 在 git 安装时对未完整发布传递图的自动解析）。
+- Only write-family **tools** are intercepted; edits inside `bash`/`pwsh`
+  commands are out of scope.
+- The diff is presented as `+` / `-` line markers — a read-only preview, not
+  interactive per-line selection; "apply partially" is not supported.
+- Cases the tool itself would fail on are **not** asked about and pass through
+  for the tool to report: `str_replace_editor create` against an existing file,
+  a non-unique or missing `old_str` / `old_string`. An empty `old_string` `edit`
+  preview deviates from the tool (treated as not-found) — the deviation is safe,
+  it never falsely blocks.
+- The button text follows `navigator.language`, not `ctx.locale` — a deliberate
+  simplification for a self-contained bundle.
+- Note the registered tool name is `str_replace_editor` (underscores), distinct
+  from the npm package name `@deepseek-ai/dsh-tool-str-replace-editor`.
 
-## 明确不包含（本期）
+## Not included
 
-- 编辑**后**审查/回滚面板——社区已有（`dsh-change-review`）。
-- 快捷键（enter 审批 / esc 拒绝等）——独立快捷键插件，二期。
-- 权限档位扩展（中间权限层）——社区已有（`dsh-auto-approval-plugin`）。
+- Post-edit review / rollback — covered by the community
+  [dsh-change-review](https://github.com/cirelir/dsh-change-review).
+- Keyboard shortcuts (Enter to approve / Esc to reject) — split into a
+  dedicated plugin.
+- Permission-tier extensions — covered by the community
+  [dsh-auto-approval-plugin](https://github.com/StyxNether/dsh-auto-approval-plugin).
 
-## 构建与测试
+## Compatibility
 
-```sh
-npm install        # devDeps 全部来自 npm registry（@deepseek-ai/dsh-* 0.1.0-rc.6、
-                   # cordis ^4.0.1、schemastery ^3.18.1），任意机器可直接安装，
-                   # 不再需要本机 deepseek-harness checkout
-npm run typecheck  # tsc 双编译面（host + client 声明）
-npm test           # vitest：diff / guard 纯函数单测 + 真实 cordis Context 集成测试（43 个用例）
-npm run build      # 全量构建：tsc → lib/（含 .d.ts）+ scripts/build-client.mjs → lib/client.js
-npm run build:portable  # 轻量构建（可选）：esbuild 打包 host 单文件 + client，无需类型检查
-```
+- Node.js `^22.19.0 || >=24.0.0`.
+- DeepSeek Harness web profile (`dsh --profile web`); peer `@deepseek-ai/*`
+  packages are resolved by the harness at runtime.
 
-`prepare` 生命周期运行**全量构建**（`npm run build`）：git 安装与 `npm pack`/`npm publish`
-始终得到完整的 `lib/`（含 `.d.ts`）与 `LICENSE`，产物确定且自洽。
+> [!WARNING]
+> This project and DSH are both in developer preview. Pin exact versions in
+> reproducible environments and review the behavior notes above.
 
-## 安装
-
-已发布到 npm，**首选 registry 直装**；安装后需**重启 dsh web**（`--profile web`）生效。
-
-### 方式 1：registry 直装（所有使用者；推荐）
-
-```sh
-dsh plugin --profile web add dsh-edit-approval
-```
-
-### 方式 2：本地 checkout（作者 / 贡献者）
+## Development
 
 ```sh
-cd dsh-edit-approval
-npm install      # devDeps 全部来自 npm registry，任意机器可直接安装
-npm run build    # tsc 全量构建（含 .d.ts）
-dsh plugin --profile web add /path/to/dsh-edit-approval   # link: 安装
+npm install            # devDeps from the npm registry
+npm run typecheck      # tsc on both compilation surfaces (host + client)
+npm test               # vitest: diff / guard unit tests + real-cordis integration (46 cases)
+npm run build          # full build: tsc → lib/ (with .d.ts) + lib/client.js bundle
+npm run build:portable # optional lightweight esbuild build, no typecheck
+node scripts/verify-host.mjs   # verify the BUILT host artifact end-to-end
 ```
 
-### 方式 3：GitHub 安装（备选）
+`prepare` runs the full build, so git installs and `npm pack`/`npm publish`
+always produce a complete `lib/` (with `.d.ts`) and the `LICENSE`.
+
+## Publishing
+
+Releases go out through GitHub Actions Trusted Publishing (OIDC, no stored
+`NPM_TOKEN`). See [docs/npm-trusted-publishing-guide.md](docs/npm-trusted-publishing-guide.md).
 
 ```sh
-dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
+npm version patch && git push origin main --tags   # triggers .github/workflows/publish.yml
 ```
 
-首次会失败：pnpm 默认阻止 git 依赖执行构建脚本。按 CLI 提示把 `allowBuilds` 键
-写入 profile 的 `pnpm-workspace.yaml`（例如 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`），
-再重跑一次即可。之后 pnpm 会自动运行插件的 `prepare`（全量构建），并安装到 profile 内。
-建议**固定 commit**（`#<sha>`），避免上游 push 静默改变安装时执行的代码。
+The workflow verifies the tag matches `package.json`, runs typecheck + tests +
+a full build + artifact verification, publishes with Sigstore provenance, and
+creates a GitHub Release. CI (`.github/workflows/ci.yml`) runs the same checks
+on every push / PR. The publish step is idempotent — a version already on npm
+is skipped.
 
-### 方式 4：tarball（离线 / 自建 registry 场景）
-
-```sh
-npm pack                                # 在插件仓库生成 dsh-edit-approval-<version>.tgz
-dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
-```
-
-`npm pack` 会先运行 `prepare`（全量构建），包内始终包含**完整预构建 `lib/`（含 `.d.ts`）与 `LICENSE`**，
-`dsh plugin add` 不再运行任何构建脚本。
-
-### 发布到 npm（GitHub Actions Trusted Publishing，已上线）
-
-已发布版本：`0.1.0`（本地 2FA）、`0.1.1`/`0.1.2`/`0.1.3`/`0.1.4`/`0.1.5`（CI OIDC + Sigstore provenance）。后续发版走 CI：
-
-```sh
-npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
-```
-
-- **一次性前置**（npmjs.com，已完成）：包发布后在包页面右上角 **settings** → **Trusted Publisher**
-  区块（注意：入口在"每个包的 settings"，不是页面顶部标签）→ Provider: GitHub Actions、
-  `Organization: SiriLee`、`Repository: dsh-edit-approval`、`Workflow filename: publish.yml`、
-  `Environment: 留空`、`Allowed actions: npm publish`。
-- workflow 需要 `permissions: id-token: write`（已配置）：npm 用 GitHub Actions 的
-  OIDC 令牌换取短期 registry 凭据并附加 Sigstore/SLSA provenance（`npm publish --provenance`）。
-- 触发方式：推送 `v<semver>` tag（要求与 `package.json` 的 `version` 一致，workflow 会校验），
-  或仓库页手动 `workflow_dispatch`。**幂等**：版本已在 npm 则跳过发布（重复 tag / 手动重跑安全）；
-  tag 自动创建 GitHub Release（`--generate-notes`）。
-- 每次 push / PR 由 `.github/workflows/ci.yml` 自动执行（Node 22，覆盖 `engines` 下限）：
-  typecheck + 43 测试 + 全量构建 + **`scripts/verify-host.mjs` 构建产物级验证** +
-  tarball 完整性检查（`lib/` 与 `LICENSE` 必须在包内）。发布时在 Node 24 上跑同一套并加
-  npm ≥ 11.5.1 校验（OIDC 必需）。
-- 包元数据已就绪：`license: MIT` + `LICENSE` 文件、`repository`、`keywords`（`dsh-plugin` 等）、
-  `engines`（与 harness 对齐 `^22.19.0 || >=24.0.0`）、`files` 白名单（`lib`/`src`/`cordis.patch.yml`/`LICENSE`/`README.md`）。
-
-## 验证效果
-
-### 1. 验证安装生效
-
-```sh
-# 配置层已组合（无需启动）
-dsh --profile web --dump-config | grep -A 3 'dsh-edit-approval'
-
-# 启动后浏览器客户端模块图含本插件（bundle 由 host 服务）
-curl -s http://127.0.0.1:3080/ | grep -o '"id":"dsh-edit-approval"'
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080/plugins/dsh-edit-approval/client.js   # 200
-```
-
-### 2. 功能验证（审批面板）
-
-新开会话，让模型执行一次写操作（如 `write src/demo.ts`）：
-
-- **拒绝** → 工具返回「the user rejected tool "write"」，文件未写入，模型可自行调整；
-- **同意**（允许一次）→ 本次写入执行，再次写操作仍会询问。
-
-面板头部应显示 `write · src/demo.ts (create): N insertions, 0 deletions`，主体为
-`+`/`-` 前缀的红绿行 diff。
-
-### 3. 验证开关与名单命令
-
-```sh
-/approval-edit status          # 查看总开关
-/approval-edit off             # 关闭后写操作直接执行，不再询问
-/approval-edit on
-```
-
-### 4. 与权限预设联动
-
-将 `ctx.approval` 会话策略切为 `never`（如 `danger-full-access` 预设）后，插件的
-`ask` 会被确定性拒绝——即编辑一律不执行，插件不绕过任何既有决策。
-
-### 5. 自动化验证（开发者）
-
-```sh
-npm run typecheck && npm test    # 43 个用例：diff/guard 纯函数 + 真实 cordis Context 集成
-```
-
-包声明 `dsh.bundle`（`cordis.patch.yml` 挂载 host 插件行）+ `dsh.client`（`exports["./client"]` 浏览器 bundle 自动入图），GitHub 仓库已打 `dsh-plugin` topic。
-
-## 目录结构
+## Directory layout
 
 ```
-src/index.ts            host 插件：tools/pre-execute 拦截 + /approval-edit 命令 + settings 注册
-src/diff.ts             行级 diff 文本生成（纯函数：LCS 对齐、渲染、统计）
-src/guard.ts            拦截决策逻辑（纯函数：工具匹配、阈值、名单、create/delete、ask/放行判定）
-src/client/index.ts     client 插件：红绿 diff 渲染 + 设置页开关 + 生命周期清理
-tests/diff.spec.ts      diff 单测
-tests/guard.spec.ts     guard 单测
-tests/integration.spec.ts  真实 cordis Context + 桩服务的 host 集成测试
-scripts/build-portable.mjs  自包含 esbuild 构建（prepare 生命周期）
-scripts/build-client.mjs    client bundle 构建（loader 闭包单一来源）
-cordis.patch.yml        bundle patch（插入插件行）
-package.json            dsh.bundle + dsh.client 声明、peerDependencies(@deepseek-ai/*, optional)
-tsconfig.json / tsconfig.client.json    host / client 双编译面
+src/index.ts            host plugin: tools/pre-execute interception + /approval-edit command + settings
+src/diff.ts             line-level diff (pure functions: LCS, head/tail trim, render, counts)
+src/guard.ts            decision logic (pure functions: tool matching, thresholds, create/delete, ask/pass)
+src/client/index.ts     client plugin: red/green diff rendering + master switch + lifecycle
+src/client/settings-row.tsx   Settings → General toggle row
+tests/                  vitest suites (diff / guard / integration)
+scripts/                build + artifact verification
+cordis.patch.yml        bundle patch (mounts the host plugin row)
+package.json            dsh.bundle + dsh.client manifests, peerDependencies
 ```
 
-## 依赖的公开 API
+## License
 
-- `@deepseek-ai/dsh-tools`：`tools/pre-execute` 事件、`PreToolDecision`、`ToolExecution`
-- `@deepseek-ai/dsh-user-approval`：`ctx.approval`（由 `{kind:'ask'}` 自动路由）
-- `@deepseek-ai/dsh-commands`：`/approval-edit` 命令注册
-- `@deepseek-ai/dsh-settings`：`edit-approval` 命名空间（开关 + 名单持久化）
-- `@deepseek-ai/dsh-fs` / `@deepseek-ai/dsh-sandbox`：目标文件读取与会话 cwd 规则
-- 客户端：`@deepseek-ai/dsh-client-runtime/client`（`session.command`、`session.getSnapshot().pending`；全部 type-only，不进入 bundle）
-
-## 参考：deepseek-harness 接口文档
-
-本地 fork：`../../oss/deepseek-harness/` · 官方仓库：[github.com/deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
-
-### 子系统文档（`docs/subsystems/`）
-
-- [approval.md](../../oss/deepseek-harness/docs/subsystems/approval.md) — `ctx.approval`、`ApprovalRequest`、`ApprovalOutcome`、会话策略 `ask`/`never`
-- [tools.md](../../oss/deepseek-harness/docs/subsystems/tools.md) — 工具执行 seam（`tools/pre-execute`、`PreToolDecision`、`ToolExecution`）
-- [commands.md](../../oss/deepseek-harness/docs/subsystems/commands.md) — 命令注册（`ctx.commands.register`、`CommandResult`）
-- [permission-presets.md](../../oss/deepseek-harness/docs/subsystems/permission-presets.md) — 权限预设（sandbox 模式 × 审批策略）
-- [session.md](../../oss/deepseek-harness/docs/subsystems/session.md) — `Session` / 事件模型（审批审计事件 `approval/asked`/`decided`）
-- [client-modules.md](../../oss/deepseek-harness/docs/subsystems/client-modules.md) — `dsh.client` 扫描与 `__DSH_BOOT__` 图
-- 根目录目录：`docs/persistence-catalog.md`（`SessionEventMap` 全量事件）、`docs/tool-catalog.md`（工具清单）、`docs/config-catalog.md`（配置清单）
-
-### 关键源码（`packages/`）
-
-| 接口 | 文件 |
-|---|---|
-| `tools/pre-execute`、`PreToolDecision`（`allow`/`deny`/`ask`）、`serviceAsk` 审批路由 | [packages/core/tools/src/index.ts](../../oss/deepseek-harness/packages/core/tools/src/index.ts) |
-| `ctx.approval`、`ApprovalOutcome` | [packages/interaction/user-approval/src/index.ts](../../oss/deepseek-harness/packages/interaction/user-approval/src/index.ts) |
-| 审批面板 DOM 锚点（`data-approval-key`、按钮） | [packages/client/ui-conversation/src/client/skeleton/ApprovalPanel.tsx](../../oss/deepseek-harness/packages/client/ui-conversation/src/client/skeleton/ApprovalPanel.tsx) |
-| `CommandDefinition`、`CommandInvocation` | [packages/interaction/commands/src/index.ts](../../oss/deepseek-harness/packages/interaction/commands/src/index.ts) |
-| settings 命名空间（`SettingsScope`） | [packages/settings/settings/src/index.ts](../../oss/deepseek-harness/packages/settings/settings/src/index.ts) |
-| 客户端 `SessionFace`（`command`） | [packages/client/runtime/src/client/contract/session.ts](../../oss/deepseek-harness/packages/client/runtime/src/client/contract/session.ts) |
-| 客户端 `PendingWait`（approval payload 的 `toolName`/`approvalId`） | [packages/client/runtime/src/client/sessions/pending.ts](../../oss/deepseek-harness/packages/client/runtime/src/client/sessions/pending.ts) |
+[MIT](LICENSE)
