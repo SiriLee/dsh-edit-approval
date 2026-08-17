@@ -29,8 +29,8 @@ import { EditApprovalRow } from './settings-row.tsx'
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
-/** Required services: sessions (pending approvals), slots + settingsScope (the settings row). */
-export const inject = ['sessions', 'slots', 'settingsScope']
+/** Required services: sessions (pending approvals), slots (the settings row). */
+export const inject = ['sessions', 'slots']
 
 /** The approval panel root anchor (set by ApprovalPanel.tsx). */
 const PANEL_SELECTOR = '[data-approval-key]'
@@ -202,19 +202,61 @@ function scan(ctx: ClientContext): void {
   }
 }
 
-/** Settings namespace backing the master switch (must match the host). */
-const SETTINGS_NAMESPACE = 'edit-approval'
+/**
+ * Read the latest `/approval-edit` command outcome ("... is on/off") from the
+ * session snapshot, or null when none has settled yet.
+ */
+function approvalEditStatus(session: SessionFace): boolean | null {
+  let last: string | undefined
+  const snapshot = session.getSnapshot()
+  for (const key of snapshot.chat.order) {
+    const node = snapshot.chat.nodes.get(key)
+    if (node?.kind !== 'command') continue
+    const command = node.data as { name?: string; outcome?: { kind?: string; text?: string } }
+    if (command.name === 'approval-edit' && command.outcome?.text !== undefined) {
+      last = command.outcome.text
+    }
+  }
+  if (last === undefined) return null
+  return / is on/.test(last)
+}
 
-/** The namespace value shape (subset used by the settings row). */
-interface EditApprovalSettingsValue {
-  enabled: boolean
+/** Resolve the current session face (the settings page opens within one). */
+function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
+  const id = ctx.sessions.list.getSnapshot().current
+  return id === undefined ? undefined : ctx.sessions.binding(id)?.session
+}
+
+/** Run `/approval-edit status` and wait for its command outcome on the session. */
+async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | null> {
+  const session = currentSessionOf(ctx)
+  if (session === undefined) return null
+  await session.command('/approval-edit status')
+  return await new Promise<boolean | null>((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const settle = (value: boolean | null): void => {
+      if (settled) return
+      settled = true
+      if (timer !== undefined) clearTimeout(timer)
+      unsubscribe()
+      resolve(value)
+    }
+    const check = (): void => {
+      const value = approvalEditStatus(session)
+      if (value !== null) settle(value)
+    }
+    const unsubscribe = session.subscribe(check)
+    timer = setTimeout(() => settle(null), 4000)
+    check()
+  })
 }
 
 /**
  * Mount the browser half: inject the diff styles, register the
  * Settings → General master-switch row, observe approval panels and enhance
  * them, and bind the Enter-to-approve shortcut. Disposal unwinds everything.
- * @param ctx - client root context carrying `sessions`, `slots`, `settingsScope`.
+ * @param ctx - client root context carrying `sessions`, `slots`.
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(function* () {
@@ -223,40 +265,20 @@ export function apply(ctx: ClientContext): void {
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}`
     document.head.appendChild(style)
 
-    // Settings → General row: the edit-approval master switch. The custom
-    // decode trusts the host-resolved value as-is: the default schema
-    // rehydration + validation path can reject our wire schema (arrays with
-    // defaults), which would leave the snapshot value unpublished and the
-    // toggle permanently unchecked despite a healthy host side.
-    const scope = ctx.settingsScope.bind<EditApprovalSettingsValue>({
-      namespace: SETTINGS_NAMESPACE,
-      decode: (value) => value as EditApprovalSettingsValue,
-    })
+    // Settings → General row: the edit-approval master switch. Status and
+    // writes go through the host `/approval-edit` command — the route proven
+    // reliable — instead of the client settingsScope RPC (which could not
+    // persist writes for this namespace in this deployment).
     const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
       id: 'edit-approval',
       order: 30,
       inject: () => ({
-        getSnapshot: () => scope.getSnapshot().value?.enabled ?? true,
-        subscribe: (cb: () => void) => scope.subscribe(cb),
+        getStatus: () => approvalEditStatusCommand(ctx),
         toggle: (next: boolean) => {
-          // Load first so the write carries the LATEST revision: the host
-          // command path (/approval-always, /approval-edit) also writes this
-          // namespace, and a stale expectedRevision makes the host reject the
-          // mutate with a conflict. Load again after the write so the row
-          // reflects the host value even if the document-updated event bridge
-          // did not reach this page. (load is on the concrete controller, not
-          // the SettingsScope contract — hence the cast.)
-          const refresh = (scope as unknown as { load(): Promise<void> }).load
-          void (async () => {
-            try {
-              await refresh()
-              await scope.set('enabled', next)
-              await refresh()
-            } catch (error) {
-              console.warn(`dsh-edit-approval: settings toggle failed: ${String(error)}`)
-            }
-          })()
+          const session = currentSessionOf(ctx)
+          if (session === undefined) return
+          void session.command(`/approval-edit ${next ? 'on' : 'off'}`)
         },
       }),
     }, EditApprovalRow))
