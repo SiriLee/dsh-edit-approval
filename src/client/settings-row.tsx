@@ -7,19 +7,25 @@
  * toggle reads and writes the same persisted value the host interception and
  * the `/approval-edit` command use.
  *
+ * The checkbox is controlled by an optimistic LOCAL state: a click flips the
+ * visual immediately (a strictly controlled checkbox would snap back until
+ * the settings RPC round-trip lands, reading as "unclickable"), then syncs
+ * the host; when the sync settles the local override is released and the row
+ * reflects the host value again.
+ *
  * @module dsh-edit-approval/client/settings-row
  */
 
-import { useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 /** Reactive face injected by the registrant (bound to the edit-approval scope). */
 export interface EditApprovalRowInjected {
-  /** Current enabled state (schema default true). */
+  /** Current enabled state from the host (schema default true). */
   getSnapshot(): boolean
   /** Subscribe to enabled-state changes (returns the unsubscribe). */
   subscribe(cb: () => void): () => void
-  /** Toggle the plugin master switch (persisted via the settings namespace). */
-  toggle(): void
+  /** Persist the given enabled state (host write; failures log to console). */
+  toggle(next: boolean): void
 }
 
 /**
@@ -28,6 +34,10 @@ export interface EditApprovalRowInjected {
  */
 export function EditApprovalRow({ getSnapshot, subscribe, toggle }: EditApprovalRowInjected) {
   const enabled = useSyncExternalStore(subscribe, getSnapshot)
+  // Optimistic override: null = reflect the host value; true/false = user's
+  // in-flight intent (released once the host write settles).
+  const [local, setLocal] = useState<boolean | null>(null)
+  const shown = local ?? enabled
   const zh = typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('zh')
   return (
     <label
@@ -46,8 +56,12 @@ export function EditApprovalRow({ getSnapshot, subscribe, toggle }: EditApproval
       </span>
       <input
         type="checkbox"
-        checked={enabled}
-        onChange={() => { toggle() }}
+        checked={shown}
+        onChange={() => {
+          const next = !shown
+          setLocal(next) // flip the visual right away
+          toggle(next) // sync the host; releases the override on settle
+        }}
         aria-label={zh ? '编辑前审批' : 'Edit approval'}
       />
     </label>

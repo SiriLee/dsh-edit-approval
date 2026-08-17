@@ -239,7 +239,7 @@ export function apply(ctx: ClientContext): void {
       inject: () => ({
         getSnapshot: () => scope.getSnapshot().value?.enabled ?? true,
         subscribe: (cb: () => void) => scope.subscribe(cb),
-        toggle: () => {
+        toggle: (next: boolean) => {
           // Load first so the write carries the LATEST revision: the host
           // command path (/approval-always, /approval-edit) also writes this
           // namespace, and a stale expectedRevision makes the host reject the
@@ -251,7 +251,6 @@ export function apply(ctx: ClientContext): void {
           void (async () => {
             try {
               await refresh()
-              const next = !(scope.getSnapshot().value?.enabled ?? true)
               await scope.set('enabled', next)
               await refresh()
             } catch (error) {
