@@ -69,26 +69,48 @@ const DIFF_STYLE = [
   '[data-approval-key] .dsh-ea-diff-add { color: var(--dsw-alias-state-success-primary, #2f9e44); }',
   '[data-approval-key] .dsh-ea-diff-remove { color: var(--dsw-alias-state-error-primary, #e03131); }',
   '[data-approval-key] .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }',
+  '[data-approval-key] .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }',
 ].join('\n')
 
 /** The panel's headline seat (stable data-attribute anchor, same as PREWRAP). */
 const HEADLINE_SELECTOR = '[data-approval-scroll] > div:first-child'
 
-/** Rebuild one headline's text into colored per-line blocks (red/green diff). */
+/**
+ * Rebuild the headline: keep the header line (tool · file · stats), render
+ * only the red/green changed lines, and mark every omitted run of grey
+ * context lines with a "…" gap — a big edit stays compact without hiding
+ * that rows were skipped. The host reason text stays complete; only this
+ * presentation filters it.
+ */
 function renderDiffRows(headline: HTMLElement): void {
   const text = headline.textContent ?? ''
   if (!text.includes('\n')) return // single-line reason: leave it as-is
   headline.textContent = ''
-  for (const line of text.split('\n')) {
+  const lines = text.split('\n')
+  const ellipsis = (): void => {
     const row = document.createElement('div')
-    row.className = line.startsWith('+')
-      ? 'dsh-ea-diff-add'
-      : line.startsWith('-')
-        ? 'dsh-ea-diff-remove'
-        : 'dsh-ea-diff-context'
-    row.textContent = line
+    row.className = 'dsh-ea-diff-ellipsis'
+    row.textContent = '…'
     headline.appendChild(row)
   }
+  // Header line: keep as a muted title.
+  const head = document.createElement('div')
+  head.className = 'dsh-ea-diff-context'
+  head.textContent = lines[0] ?? ''
+  headline.appendChild(head)
+  let lastRendered = 0
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index]!
+    if (!line.startsWith('+') && !line.startsWith('-')) continue // context omitted
+    if (index > lastRendered + 1) ellipsis() // gap between rendered rows
+    const row = document.createElement('div')
+    row.className = line.startsWith('+') ? 'dsh-ea-diff-add' : 'dsh-ea-diff-remove'
+    row.textContent = line
+    headline.appendChild(row)
+    lastRendered = index
+  }
+  // Trailing context after the last change: mark it too.
+  if (lastRendered < lines.length - 1) ellipsis()
 }
 
 /** Panels already enhanced in this page lifetime. */
