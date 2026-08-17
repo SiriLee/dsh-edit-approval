@@ -194,26 +194,6 @@ function enhance(ctx: ClientContext, panel: Element): boolean {
   return true
 }
 
-/**
- * Approve with the keyboard: while an approval panel is on screen, Enter
- * clicks its allow-once action (the panel occupies the composer, so no text
- * input is in play; the target guard keeps accidental fires out of inputs).
- */
-function bindEnterToApprove(): () => void {
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.repeat || event.key !== 'Enter') return
-    const target = event.target
-    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
-    const panel = document.querySelector<HTMLElement>(PANEL_SELECTOR)
-    if (panel === null) return
-    const buttons = panel.querySelectorAll('button')
-    const allowOnce = buttons[buttons.length - 1]
-    if (allowOnce instanceof HTMLButtonElement && !allowOnce.disabled) allowOnce.click()
-  }
-  document.addEventListener('keydown', onKeyDown)
-  return () => document.removeEventListener('keydown', onKeyDown)
-}
-
 /** Scan the document for approval panels that are not yet enhanced. */
 function scan(ctx: ClientContext): void {
   for (const panel of document.querySelectorAll(PANEL_SELECTOR)) {
@@ -315,10 +295,7 @@ export function apply(ctx: ClientContext): void {
     if (document.body !== null) start()
     else document.addEventListener('DOMContentLoaded', onReady, { once: true })
 
-    const unbindEnter = bindEnterToApprove()
-
     yield () => {
-      unbindEnter()
       unbindRow()
       observer?.disconnect()
       document.removeEventListener('DOMContentLoaded', onReady)
