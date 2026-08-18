@@ -1,6 +1,6 @@
 {
   "name": "dsh-edit-approval",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once or reject (Claude Code behavior).",
   "keywords": [
     "dsh",
