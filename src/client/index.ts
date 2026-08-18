@@ -16,8 +16,7 @@
 
 // Type-only: both are module-table words, never inlined; the runtime code
 // below touches only the DOM and the session face.
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, SessionFace, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the settings slot declaration ('settings.general.item').
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale service merge (`ctx.locale`) and the slot
@@ -36,8 +35,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
-/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy). */
-export const inject = ['sessions', 'slots', 'locale']
+/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy), settingsScope (read the switch). */
+export const inject = ['sessions', 'slots', 'locale', 'settingsScope']
+
+/** Settings namespace backing the runtime toggle (mirrors the host plugin). */
+const SETTINGS_NAMESPACE = 'edit-approval'
+
+/** The enabled flag the settings row reads (a subset of the host schema). */
+interface EditApprovalClientSettings {
+  enabled: boolean
+}
 
 /** The approval panel root anchor (set by ApprovalPanel.tsx). */
 const PANEL_SELECTOR = '[data-approval-key]'
@@ -215,13 +222,10 @@ async function waitForApprovalEditOutcome(
   })
 }
 
-/** Run `/approval-edit status` and wait for its (baselined) command outcome. */
-async function approvalEditStatusCommand(ctx: ClientContext): Promise<boolean | null> {
-  const session = currentSessionOf(ctx)
-  if (session === undefined) return null
-  const base = session.getSnapshot().chat.order.length
-  await session.command('/approval-edit status')
-  return await waitForApprovalEditOutcome(session, base)
+/** Read the master switch from the settings scope, or null until it settles. */
+function readEnabled(scope: SettingsScope<EditApprovalClientSettings>): boolean | null {
+  const snapshot = scope.getSnapshot()
+  return snapshot.status === 'ready' && snapshot.value !== undefined ? snapshot.value.enabled : null
 }
 
 /**
@@ -241,18 +245,40 @@ export function apply(ctx: ClientContext): void {
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}`
     document.head.appendChild(style)
 
-    // Settings → General row: the edit-approval master switch. Status and
-    // writes go through the host `/approval-edit` command — the route proven
-    // reliable — instead of the client settingsScope RPC (which could not
-    // persist writes for this namespace in this deployment). `locale: NS`
-    // synthesizes the `t` seat on the row's props.
+    // Settings → General row: the edit-approval master switch. Reads go
+    // through the local settings scope (no session command, so opening the
+    // settings page never prints `/approval-edit` into the chat); writes go
+    // through the host `/approval-edit on|off` command — the route proven to
+    // persist, unlike the client settingsScope write for this namespace.
+    // `locale: NS` synthesizes the `t` seat on the row's props.
+    const settingsScope = ctx.settingsScope.bind<EditApprovalClientSettings>({ namespace: SETTINGS_NAMESPACE })
     const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
       id: 'edit-approval',
       order: 30,
       locale: NS,
       inject: () => ({
-        getStatus: () => approvalEditStatusCommand(ctx),
+        getStatus: async (): Promise<boolean | null> => {
+          const immediate = readEnabled(settingsScope)
+          if (immediate !== null) return immediate
+          // Still loading: wait for the first settled snapshot, then resolve
+          // null so the row stays disabled rather than guessing.
+          return await new Promise<boolean | null>((resolve) => {
+            let settled = false
+            const settle = (value: boolean | null): void => {
+              if (settled) return
+              settled = true
+              clearTimeout(timer)
+              unsubscribe()
+              resolve(value)
+            }
+            const unsubscribe = settingsScope.subscribe(() => {
+              const value = readEnabled(settingsScope)
+              if (value !== null) settle(value)
+            })
+            const timer = setTimeout(() => settle(null), 4000)
+          })
+        },
         // Resolves with the value the host committed: the toggle command's
         // own baselined outcome, not a later guess.
         toggle: async (next: boolean): Promise<boolean | null> => {
