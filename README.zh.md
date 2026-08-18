@@ -39,7 +39,7 @@
 
 | Settings → General 总开关 | 聊天中的 `/approval-edit` 命令及其参数 |
 |:---:|:---:|
-| ![设置页 General 下的编辑前审批开关](assets/screenshots/settings-switch.png) | ![展示 on|off|status 参数的 /approval-edit 命令](assets/screenshots/status-command.png) |
+| ![设置页 General 下的编辑前审批开关](assets/screenshots/settings-switch.png) | ![展示 on\|off\|status 参数的 /approval-edit 命令](assets/screenshots/status-command.png) |
 
 | 审批面板——红绿行级 diff |
 |:---:|

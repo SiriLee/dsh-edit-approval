@@ -39,7 +39,7 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 
 | Master switch in Settings → General | The `/approval-edit` command and its arguments |
 |:---:|:---:|
-| ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) | ![The /approval-edit command showing its on|off|status arguments](assets/screenshots/status-command.png) |
+| ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) | ![The /approval-edit command showing its on\|off\|status arguments](assets/screenshots/status-command.png) |
 
 | Approval panel — red/green line diff |
 |:---:|
