@@ -128,6 +128,13 @@ describe('installCollapseButton', () => {
     expect(style.textContent).toContain(`[data-approval-key].${COLLAPSED_CLASS} [data-approval-scroll] { display: none; }`)
   })
 
+  it('points the chevron down when expanded and up when collapsed (harness disclosure convention)', () => {
+    // The raw icon is a down chevron; expanded shows it unrotated (▾, like the
+    // harness open DisclosureRows), collapsed rotates it 180° (▴).
+    expect(COLLAPSE_STYLE).toContain(`transform: rotate(0deg)`)
+    expect(COLLAPSE_STYLE).toContain(`[data-approval-key].${COLLAPSED_CLASS} .${COLLAPSE_BUTTON_CLASS} svg { transform: rotate(180deg); }`)
+  })
+
   it('wires aria-controls to a stable id on the body', () => {
     const panel = makePanel('h\n+a\n-b')
     installCollapseButton(panel, labels)
