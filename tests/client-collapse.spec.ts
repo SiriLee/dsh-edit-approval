@@ -25,6 +25,18 @@ function makePanel(reason: string): HTMLElement {
   return panel
 }
 
+/** Mimic the plugin's `renderDiffRows` rebuild: split the headline text into row divs. */
+function rebuildHeadline(panel: HTMLElement): void {
+  const headline = panel.querySelector('[data-approval-scroll] > div') as HTMLElement
+  const lines = headline.textContent!.split('\n')
+  headline.textContent = ''
+  for (const line of lines) {
+    const row = document.createElement('div')
+    row.textContent = line
+    headline.appendChild(row)
+  }
+}
+
 const labels = { collapse: '折叠审批详情', expand: '展开审批详情' }
 
 describe('installCollapseButton', () => {
@@ -52,6 +64,18 @@ describe('installCollapseButton', () => {
     // Button sits inside the strip (card's first child), i.e. the card's top-right.
     const strip = panel.firstElementChild?.firstElementChild
     expect(strip?.lastElementChild).toBe(button)
+  })
+
+  it('installs after the diff rebuild (the real enhance() call order)', () => {
+    // Regression: enhance() runs renderDiffRows BEFORE installCollapseButton,
+    // and the rebuild splits the headline into row divs, so its textContent
+    // no longer contains '\n'. The multi-line verdict must still hold.
+    const panel = makePanel('edit · a.ts (modify): +3 -2\n+ old line\n- new line')
+    rebuildHeadline(panel)
+    expect(panel.querySelector('[data-approval-scroll] > div')!.textContent).not.toContain('\n')
+
+    installCollapseButton(panel, labels)
+    expect(panel.querySelector(`.${COLLAPSE_BUTTON_CLASS}`)).not.toBeNull()
   })
 
   it('is a no-op for a single-line approval (no diff to collapse)', () => {

@@ -22,9 +22,6 @@ export const COLLAPSE_BUTTON_CLASS = 'dsh-ea-collapse-btn'
 /** Per-panel `aria-controls` id prefix for the scrollable body. */
 const BODY_ID_PREFIX = 'dsh-ea-body-'
 
-/** The strip seat: card's first child (root > card > strip). */
-const STRIP_SELECTOR = ':scope > :first-child > :first-child'
-
 /** The scrollable body seat (the same structural anchor the diff rendering uses). */
 const BODY_SELECTOR = '[data-approval-scroll]'
 
@@ -90,9 +87,15 @@ export function installCollapseButton(panel: Element, labels: CollapseLabels): v
   const body = panel.querySelector<HTMLElement>(BODY_SELECTOR)
   if (body === null) return
   const headline = body.firstElementChild
-  if ((headline?.textContent ?? '').includes('\n') === false) return // single-line: nothing to collapse
-  const strip = panel.querySelector<HTMLElement>(STRIP_SELECTOR)
-  if (strip === null) return
+  // A diff is present either before the headline rebuild (raw text still
+  // carries `\n`) or after it (the rebuild splits the text into row divs, so
+  // the concatenated textContent has no newlines — but the headline then has
+  // >1 child). Single-line escalation approvals have neither, so they keep
+  // the native compact panel.
+  const multiLine = (headline?.children.length ?? 0) > 1 || (headline?.textContent ?? '').includes('\n')
+  if (!multiLine) return
+  const strip = panel.firstElementChild?.firstElementChild
+  if (strip === null || strip === undefined) return
 
   // Stable per-panel id for `aria-controls` (keyed by the approval key).
   const key = (panel.getAttribute('data-approval-key') ?? '').replace(/[^a-zA-Z0-9_-]/g, '')
