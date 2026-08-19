@@ -30,6 +30,7 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 | --- | --- |
 | Pre-write approval | Intercepts `write` / `edit` / `str_replace_editor` on the `tools/pre-execute` seam and asks before any file is modified |
 | Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; rendered per-line in the approval panel, with unchanged runs collapsed to `…` |
+| Panel collapse | Long diffs can be collapsed via the button at the strip's right end to reveal the agent's output; CSS-only hide/show, expanding restores the exact view |
 | Approve once / reject | Two actions, mirroring the Claude Code edit-approval flow; rejection reports back to the model |
 | Master switch | Settings → General "Edit approval" row, backed by the `/approval-edit on\|off\|status` host command (same source) |
 | Policy-aware | Respects the session approval policy: `ask` intercepts, `never` (full access) runs edits through untouched |
@@ -70,9 +71,10 @@ runs before a tool executes) and matches a whitelist of registered tool names:
 
 The browser half (`dsh.client`) rebuilds the panel's plain-text headline into
 red/green per-line blocks, adds a `white-space: pre-wrap` compensation for the
-headline's CSS, and registers the Settings → General master-switch row. All side
-effects live in a single `ctx.effect` (torn down on plugin unload / HMR), and a
-per-animation-frame `MutationObserver` enhances approval panels as they appear.
+headline's CSS, installs the collapse button on multi-line diffs, and registers
+the Settings → General master-switch row. All side effects live in a single
+`ctx.effect` (torn down on plugin unload / HMR), and a per-animation-frame
+`MutationObserver` enhances approval panels as they appear.
 
 ## Approval policy interaction
 
@@ -193,7 +195,7 @@ deployment defaults by restating only the keys it changes:
 ```sh
 npm install            # devDeps from the npm registry
 npm run typecheck      # tsc on both compilation surfaces (host + client)
-npm test               # vitest: diff / guard unit tests + real-cordis integration (46 cases)
+npm test               # vitest: diff / guard unit tests + real-cordis integration + jsdom panel-collapse (54 cases)
 npm run build          # full build: tsc → lib/ (with .d.ts) + lib/client.js bundle
 npm run build:portable # optional lightweight esbuild build, no typecheck
 node scripts/verify-host.mjs   # verify the BUILT host artifact end-to-end
@@ -225,7 +227,7 @@ src/diff.ts             line-level diff (pure functions: LCS, head/tail trim, re
 src/guard.ts            decision logic (pure functions: tool matching, thresholds, create/delete, ask/pass)
 src/client/index.ts     client plugin: red/green diff rendering + master switch + lifecycle
 src/client/settings-row.tsx   Settings → General toggle row
-tests/                  vitest suites (diff / guard / integration)
+tests/                  vitest suites (diff / guard / integration / client collapse)
 scripts/                build + artifact verification
 cordis.patch.yml        bundle patch (mounts the host plugin row)
 package.json            dsh.bundle + dsh.client manifests, peerDependencies

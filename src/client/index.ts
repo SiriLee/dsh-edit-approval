@@ -23,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // declaration; runtime copy comes from the locale dictionary below.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditApprovalRow } from './settings-row.tsx'
+import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
 import { en, NS, zh, type EditApprovalKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -140,23 +141,30 @@ function hasPendingApproval(ctx: ClientContext, key: string): boolean {
 }
 
 /** Rebuild the diff headline of one freshly rendered approval panel. */
-function enhance(ctx: ClientContext, panel: Element): boolean {
+function enhance(ctx: ClientContext, panel: Element, t: (key: EditApprovalKey) => string): boolean {
   const key = panel.getAttribute('data-approval-key')
   if (key === null) return false
   if (!hasPendingApproval(ctx, key)) return false // pending not visible yet; a later mutation retries
   // Red/green diff: rebuild the plain-text headline into colored rows.
   const headline = panel.querySelector<HTMLElement>(HEADLINE_SELECTOR)
-  if (headline !== null) renderDiffRows(headline)
+  if (headline !== null) {
+    const multiLine = (headline.textContent ?? '').includes('\n')
+    renderDiffRows(headline)
+    // Collapse button: only for real (multi-line) diffs, at the strip's right end.
+    if (multiLine) {
+      installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') })
+    }
+  }
   return true
 }
 
 /** Scan the document for approval panels that are not yet enhanced. */
-function scan(ctx: ClientContext): void {
+function scan(ctx: ClientContext, t: (key: EditApprovalKey) => string): void {
   for (const panel of document.querySelectorAll(PANEL_SELECTOR)) {
     if (enhanced.has(panel)) continue
     // Mark only on success so a panel whose pending approval is not yet
     // visible (transient) is retried on the next mutation.
-    if (enhance(ctx, panel)) enhanced.add(panel)
+    if (enhance(ctx, panel, t)) enhanced.add(panel)
   }
 }
 
@@ -239,10 +247,13 @@ export function apply(ctx: ClientContext): void {
   // language preference. Registered once for the plugin's lifetime.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-edit-approval: locale dictionaries')
 
+  // Bound translate seat for the panel copy (collapse/expand labels).
+  const t = ctx.locale.bind(NS)
+
   ctx.effect(function* () {
     const style = document.createElement('style')
     style.dataset.plugin = 'dsh-edit-approval'
-    style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}`
+    style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}\n${COLLAPSE_STYLE}`
     document.head.appendChild(style)
 
     // Settings → General row: the edit-approval master switch. Reads go
@@ -301,13 +312,13 @@ export function apply(ctx: ClientContext): void {
       if (scanFrame !== undefined) return
       scanFrame = requestAnimationFrame(() => {
         scanFrame = undefined
-        scan(ctx)
+        scan(ctx, t)
       })
     }
     const start = (): void => {
       observer = new MutationObserver(() => { scheduleScan() })
       observer.observe(document.body, { childList: true, subtree: true })
-      scan(ctx)
+      scan(ctx, t)
     }
     const onReady = (): void => { start() }
     if (document.body !== null) start()
