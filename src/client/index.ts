@@ -24,6 +24,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditApprovalRow } from './settings-row.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
+import { FocusRestore } from './refocus.ts'
 import { en, NS, zh, type EditApprovalKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -304,6 +305,26 @@ export function apply(ctx: ClientContext): void {
 
     let observer: MutationObserver | undefined
     let scanFrame: number | undefined
+    // Approval resolution focus-restore: while the panel is up, the user's
+    // focus is on its approve/reject button, so removing the panel drops the
+    // caret to <body>. When a `[data-approval-key]` panel is removed from the
+    // DOM (the approval resolved), hand focus back to the last editable seat
+    // the user was typing in (the composer). See refocus.ts for the guards.
+    const focusRestore = new FocusRestore()
+    document.addEventListener('focusin', focusRestore.onFocusIn, true)
+    const containsPanel = (root: Element): boolean =>
+      root.matches(PANEL_SELECTOR) || root.querySelector(PANEL_SELECTOR) !== null
+    const onResolved = (records: MutationRecord[]): void => {
+      for (const record of records) {
+        if (record.type !== 'childList') continue
+        for (const node of record.removedNodes) {
+          if (node instanceof Element && containsPanel(node)) {
+            focusRestore.restore()
+            break
+          }
+        }
+      }
+    }
     // Batch mutations into one scan per animation frame: a busy session
     // mutates the chat DOM on every streamed token, and a full
     // `[data-approval-key]` query per mutation is wasted while no panel is
@@ -316,7 +337,10 @@ export function apply(ctx: ClientContext): void {
       })
     }
     const start = (): void => {
-      observer = new MutationObserver(() => { scheduleScan() })
+      observer = new MutationObserver((records) => {
+        onResolved(records)
+        scheduleScan()
+      })
       observer.observe(document.body, { childList: true, subtree: true })
       scan(ctx, t)
     }
@@ -328,6 +352,7 @@ export function apply(ctx: ClientContext): void {
       unbindRow()
       observer?.disconnect()
       if (scanFrame !== undefined) cancelAnimationFrame(scanFrame)
+      document.removeEventListener('focusin', focusRestore.onFocusIn, true)
       document.removeEventListener('DOMContentLoaded', onReady)
       style.remove()
     }
