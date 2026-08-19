@@ -60,6 +60,9 @@ describe('installCollapseButton', () => {
     expect(button!.type).toBe('button')
     expect(button!.getAttribute('aria-expanded')).toBe('true')
     expect(button!.getAttribute('aria-label')).toBe(labels.collapse)
+    // Hotkey opt-out: dsh-approval-hotkeys must not pick this utility button
+    // as the panel's cancel ("first") or confirm ("last") action.
+    expect(button!.getAttribute('data-hotkey')).toBe('none')
     expect(panel.classList.contains(COLLAPSED_CLASS)).toBe(false)
     // Button sits inside the strip (card's first child), i.e. the card's top-right.
     const strip = panel.firstElementChild?.firstElementChild

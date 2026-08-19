@@ -105,6 +105,11 @@ export function installCollapseButton(panel: Element, labels: CollapseLabels): v
   const button = document.createElement('button')
   button.type = 'button'
   button.className = COLLAPSE_BUTTON_CLASS
+  // Hotkey contract: dsh-approval-hotkeys resolves a panel's cancel/confirm
+  // buttons by position; utility controls must opt out or they would be
+  // picked as "the first button" (Esc would collapse the panel instead of
+  // rejecting). `data-hotkey="none"` is the shared opt-out marker.
+  button.setAttribute('data-hotkey', 'none')
   button.setAttribute('aria-expanded', 'true')
   button.setAttribute('aria-controls', body.id)
   button.setAttribute('aria-label', labels.collapse)
