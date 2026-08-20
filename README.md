@@ -7,8 +7,6 @@
 
 Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): intercepts `write` / `edit` / `str_replace_editor` and shows a red/green line-level diff **before** the file is touched — **approve once or reject**, with a master switch in Settings → General.
 
-> **Status:** published to npm (`v0.2.2`) via GitHub Actions Trusted Publishing + Sigstore provenance. Targets the web profile (`dsh --profile web`).
-
 ## ✨ Features
 
 | Feature | Description |

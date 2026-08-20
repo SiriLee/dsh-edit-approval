@@ -7,8 +7,6 @@
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**编辑前审批**：在 `write` / `edit` / `str_replace_editor` 真正落盘之前，弹出**红绿行级 diff**——**同意一次 / 拒绝**，并可在 Settings → General 一键关闭。
 
-> **状态**：已发布 npm（`v0.2.2`），经 GitHub Actions Trusted Publishing + Sigstore provenance 构建发布。目标为 web 配置档（`dsh --profile web`）。
-
 ## ✨ 功能特性
 
 | 特性 | 说明 |
