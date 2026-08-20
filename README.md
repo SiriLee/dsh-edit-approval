@@ -1,11 +1,11 @@
 # dsh-edit-approval
 
+Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): **every `write` / `edit` / `str_replace_editor` call asks before the file is touched** — a red/green line-level diff, then **approve once or reject**; master switch in Settings → General.
+
 [![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
 [![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
 
 > English | [中文](README.zh.md)
-
-Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): intercepts `write` / `edit` / `str_replace_editor` and shows a red/green line-level diff **before** the file is touched — **approve once or reject**, with a master switch in Settings → General.
 
 ## ✨ Features
 
@@ -30,6 +30,16 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
     <td align="center" colspan="2"><img src="assets/screenshots/approval-panel.png" width="760" alt="Approval panel with the red/green line diff"><br><sub>Approval panel — red/green line diff</sub></td>
   </tr>
 </table>
+
+## 📦 Install
+
+Published to npm — the registry path is the recommended one. **Restart dsh web (`--profile web`) after installing.**
+
+```sh
+dsh plugin --profile web add dsh-edit-approval
+```
+
+For contributors: local checkout (`dsh plugin --profile web add /path/to/dsh-edit-approval`), a pinned GitHub commit (`dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<sha>`), or an offline tarball (`npm pack` then `dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz`). A git install fails on first run until you add an `allowBuilds` key to the profile's `pnpm-workspace.yaml` (pnpm blocks git dependencies from running build scripts); after that it runs the plugin's `prepare` and installs it. `npm pack` also runs `prepare`, so a tarball always carries a prebuilt `lib/` (with `.d.ts`) and the `LICENSE`.
 
 ## How it works
 
@@ -74,50 +84,6 @@ Under `never`, every `ask` this plugin emitted would be deterministically
 rejected by the approval service, silently breaking every edit in a full-access
 session. The plugin therefore stops asking and lets the sandbox enforce. It
 never expands access or changes the sandbox mode.
-
-## 📦 Install
-
-Published to npm — the registry path is the recommended one. **Restart dsh web (`--profile web`) after installing.**
-
-```sh
-dsh plugin --profile web add dsh-edit-approval
-```
-
-For contributors — local checkout, pinned GitHub commit, or offline tarball:
-
-<details>
-<summary>Alternative installs</summary>
-
-### Local checkout
-
-```sh
-cd dsh-edit-approval
-npm install      # devDeps come from the npm registry; no harness checkout needed
-npm run build    # full tsc build, including .d.ts
-dsh plugin --profile web add /path/to/dsh-edit-approval   # link install
-```
-
-### GitHub (pin a commit for reproducibility)
-
-```sh
-dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
-```
-
-First run fails: pnpm blocks git dependencies from running build scripts. Follow
-the CLI hint to add an `allowBuilds` key to the profile's `pnpm-workspace.yaml`
-(e.g. `$DSH_HOME/profiles/web/pnpm-workspace.yaml`), then retry. pnpm then runs
-the plugin's `prepare` (full build) and installs it into the profile.
-
-### Tarball (offline / self-hosted registry)
-
-```sh
-npm pack                                   # produces dsh-edit-approval-<version>.tgz
-dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
-```
-
-`npm pack` runs `prepare`, so the tarball always carries a prebuilt `lib/`
-(including `.d.ts`) and the `LICENSE`; `dsh plugin add` runs no build scripts.
-</details>
 
 ## Configure
 

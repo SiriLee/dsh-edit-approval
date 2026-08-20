@@ -1,11 +1,11 @@
 # dsh-edit-approval
 
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**编辑前审批**：**每次 `write` / `edit` / `str_replace_editor` 调用都在文件真正落盘前先询问**——弹出红绿行级 diff，然后**同意一次 / 拒绝**；可在 Settings → General 一键关闭。
+
 [![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
 [![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
 
 > [English](README.md) | 中文
-
-为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**编辑前审批**：在 `write` / `edit` / `str_replace_editor` 真正落盘之前，弹出**红绿行级 diff**——**同意一次 / 拒绝**，并可在 Settings → General 一键关闭。
 
 ## ✨ 功能特性
 
@@ -31,6 +31,16 @@
   </tr>
 </table>
 
+## 📦 安装
+
+已发布 npm——**优先走 registry 直装**；安装后**重启 dsh web（`--profile web`）生效**。
+
+```sh
+dsh plugin --profile web add dsh-edit-approval
+```
+
+贡献者：本地 checkout（`dsh plugin --profile web add /path/to/dsh-edit-approval`）、固定 commit（`dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<sha>`）或离线 tarball（`npm pack` 后 `dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz`）。git 安装首次会失败：pnpm 默认阻止 git 依赖执行构建脚本，按提示在 profile 的 `pnpm-workspace.yaml` 添加 `allowBuilds` 键后重试，之后会运行插件 `prepare` 并完成安装；`npm pack` 同样会运行 `prepare`，tarball 内始终包含预构建 `lib/`（含 `.d.ts`）与 `LICENSE`。
+
 ## 工作原理
 
 插件监听 `tools/pre-execute` 瀑布（harness 在工具执行前运行的 seam），匹配注册工具名白名单：`write`、`edit`、`str_replace_editor`。对每个被拦截的调用：
@@ -54,46 +64,6 @@ harness 的会话审批策略（`ask` / `never`）持续生效：
 | `never`（如 `danger-full-access` 预设） | 直接放行——编辑不再询问，由沙箱继续约束 |
 
 在 `never` 下，插件发出的每个 `ask` 都会被审批服务确定性转为拒绝，导致全权会话里所有编辑被静默拦截。因此插件停止询问、交由沙箱兜底。插件绝不扩大权限，也不改变沙箱模式。
-
-## 📦 安装
-
-已发布 npm——**优先走 registry 直装**；安装后**重启 dsh web（`--profile web`）生效**。
-
-```sh
-dsh plugin --profile web add dsh-edit-approval
-```
-
-贡献者——本地 checkout、固定 commit 或离线 tarball：
-
-<details>
-<summary>其他安装方式</summary>
-
-### 本地 checkout（作者 / 贡献者）
-
-```sh
-cd dsh-edit-approval
-npm install      # devDeps 全部来自 npm registry，无需本机 harness checkout
-npm run build    # tsc 全量构建，含 .d.ts
-dsh plugin --profile web add /path/to/dsh-edit-approval   # link 安装
-```
-
-### GitHub（建议固定 commit 保证可复现）
-
-```sh
-dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
-```
-
-首次会失败：pnpm 默认阻止 git 依赖执行构建脚本。按 CLI 提示把 `allowBuilds` 键写入 profile 的 `pnpm-workspace.yaml`（如 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`），重试即可。之后 pnpm 会自动运行插件的 `prepare`（全量构建）并安装到 profile 内。
-
-### tarball（离线 / 自建 registry）
-
-```sh
-npm pack                                   # 生成 dsh-edit-approval-<version>.tgz
-dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
-```
-
-`npm pack` 会运行 `prepare`，tarball 内始终包含完整预构建 `lib/`（含 `.d.ts`）与 `LICENSE`；`dsh plugin add` 不再运行任何构建脚本。
-</details>
 
 ## 配置
 
