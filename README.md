@@ -77,16 +77,18 @@ never expands access or changes the sandbox mode.
 
 ## 📦 Install
 
-Published to npm — the registry path is the recommended one. **Restart dsh web
-(`--profile web`) after installing.**
-
-### Option A: registry (recommended)
+Published to npm — the registry path is the recommended one. **Restart dsh web (`--profile web`) after installing.**
 
 ```sh
 dsh plugin --profile web add dsh-edit-approval
 ```
 
-### Option B: local checkout (authors / contributors)
+For contributors — local checkout, pinned GitHub commit, or offline tarball:
+
+<details>
+<summary>Alternative installs</summary>
+
+### Local checkout
 
 ```sh
 cd dsh-edit-approval
@@ -95,7 +97,7 @@ npm run build    # full tsc build, including .d.ts
 dsh plugin --profile web add /path/to/dsh-edit-approval   # link install
 ```
 
-### Option C: GitHub (pin a commit for reproducibility)
+### GitHub (pin a commit for reproducibility)
 
 ```sh
 dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
@@ -106,7 +108,7 @@ the CLI hint to add an `allowBuilds` key to the profile's `pnpm-workspace.yaml`
 (e.g. `$DSH_HOME/profiles/web/pnpm-workspace.yaml`), then retry. pnpm then runs
 the plugin's `prepare` (full build) and installs it into the profile.
 
-### Option D: tarball (offline / self-hosted registry)
+### Tarball (offline / self-hosted registry)
 
 ```sh
 npm pack                                   # produces dsh-edit-approval-<version>.tgz
@@ -115,6 +117,7 @@ dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
 
 `npm pack` runs `prepare`, so the tarball always carries a prebuilt `lib/`
 (including `.d.ts`) and the `LICENSE`; `dsh plugin add` runs no build scripts.
+</details>
 
 ## Configure
 

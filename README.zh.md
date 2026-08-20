@@ -59,13 +59,16 @@ harness 的会话审批策略（`ask` / `never`）持续生效：
 
 已发布 npm——**优先走 registry 直装**；安装后**重启 dsh web（`--profile web`）生效**。
 
-### 方式 A：registry 直装（推荐）
-
 ```sh
 dsh plugin --profile web add dsh-edit-approval
 ```
 
-### 方式 B：本地 checkout（作者 / 贡献者）
+贡献者——本地 checkout、固定 commit 或离线 tarball：
+
+<details>
+<summary>其他安装方式</summary>
+
+### 本地 checkout（作者 / 贡献者）
 
 ```sh
 cd dsh-edit-approval
@@ -74,7 +77,7 @@ npm run build    # tsc 全量构建，含 .d.ts
 dsh plugin --profile web add /path/to/dsh-edit-approval   # link 安装
 ```
 
-### 方式 C：GitHub（建议固定 commit 保证可复现）
+### GitHub（建议固定 commit 保证可复现）
 
 ```sh
 dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
@@ -82,7 +85,7 @@ dsh plugin --profile web add github:SiriLee/dsh-edit-approval#<commit-sha>
 
 首次会失败：pnpm 默认阻止 git 依赖执行构建脚本。按 CLI 提示把 `allowBuilds` 键写入 profile 的 `pnpm-workspace.yaml`（如 `$DSH_HOME/profiles/web/pnpm-workspace.yaml`），重试即可。之后 pnpm 会自动运行插件的 `prepare`（全量构建）并安装到 profile 内。
 
-### 方式 D：tarball（离线 / 自建 registry）
+### tarball（离线 / 自建 registry）
 
 ```sh
 npm pack                                   # 生成 dsh-edit-approval-<version>.tgz
@@ -90,6 +93,7 @@ dsh plugin --profile web add ./dsh-edit-approval-<version>.tgz
 ```
 
 `npm pack` 会运行 `prepare`，tarball 内始终包含完整预构建 `lib/`（含 `.d.ts`）与 `LICENSE`；`dsh plugin add` 不再运行任何构建脚本。
+</details>
 
 ## 配置
 
