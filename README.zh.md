@@ -1,28 +1,13 @@
 # dsh-edit-approval
 
-[English](README.md)
+[![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
+[![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
+
+> [English](README.md) | 中文
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**编辑前审批**：在 `write` / `edit` / `str_replace_editor` 真正落盘之前，弹出**红绿行级 diff**——**同意一次 / 拒绝**，并可在 Settings → General 一键关闭。
 
 > **状态**：已发布 npm（`v0.2.2`），经 GitHub Actions Trusted Publishing + Sigstore provenance 构建发布。目标为 web 配置档（`dsh --profile web`）。
-
-[![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
-[![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
-
-## 目录
-
-- [✨ 功能特性](#-功能特性)
-- [📸 截图](#-截图)
-- [工作原理](#工作原理)
-- [与审批策略的联动](#与审批策略的联动)
-- [安装](#-安装)
-- [配置](#配置)
-- [行为细节与限制](#行为细节与限制)
-- [明确不包含](#明确不包含)
-- [兼容性](#兼容性)
-- [开发](#开发)
-- [发布](#发布)
-- [License](#license)
 
 ## ✨ 功能特性
 
@@ -38,13 +23,15 @@
 
 ## 📸 截图
 
-| Settings → General 总开关 | 聊天中的 `/approval-edit` 命令及其参数 |
-|:---:|:---:|
-| ![设置页 General 下的编辑前审批开关](assets/screenshots/settings-switch.png) | ![展示 on\|off\|status 参数的 /approval-edit 命令](assets/screenshots/status-command.png) |
-
-| 审批面板——红绿行级 diff |
-|:---:|
-| ![审批面板：工具/文件头部 + 红绿行级 diff](assets/screenshots/approval-panel.png) |
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/settings-switch.png" width="440" alt="Settings → General 总开关"><br><sub>Settings → General 总开关</sub></td>
+    <td align="center"><img src="assets/screenshots/status-command.png" width="440" alt="聊天中的 /approval-edit 命令及其参数"><br><sub>聊天中的 /approval-edit 命令及其参数</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="assets/screenshots/approval-panel.png" width="760" alt="审批面板：红绿行级 diff"><br><sub>审批面板——红绿行级 diff</sub></td>
+  </tr>
+</table>
 
 ## 工作原理
 

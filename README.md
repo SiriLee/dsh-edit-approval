@@ -1,28 +1,13 @@
 # dsh-edit-approval
 
-[简体中文](README.zh.md)
+[![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
+[![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
+
+> English | [中文](README.zh.md)
 
 Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): intercepts `write` / `edit` / `str_replace_editor` and shows a red/green line-level diff **before** the file is touched — **approve once or reject**, with a master switch in Settings → General.
 
 > **Status:** published to npm (`v0.2.2`) via GitHub Actions Trusted Publishing + Sigstore provenance. Targets the web profile (`dsh --profile web`).
-
-[![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
-[![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
-
-## Table of contents
-
-- [✨ Features](#-features)
-- [📸 Screenshots](#-screenshots)
-- [How it works](#how-it-works)
-- [Approval policy interaction](#approval-policy-interaction)
-- [Install](#-install)
-- [Configure](#configure)
-- [Behavior details & limitations](#behavior-details--limitations)
-- [Not included](#not-included)
-- [Compatibility](#compatibility)
-- [Development](#development)
-- [Publishing](#publishing)
-- [License](#license)
 
 ## ✨ Features
 
@@ -38,13 +23,15 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 
 ## 📸 Screenshots
 
-| Master switch in Settings → General | The `/approval-edit` command and its arguments |
-|:---:|:---:|
-| ![Settings → General with the Edit approval toggle row](assets/screenshots/settings-switch.png) | ![The /approval-edit command showing its on\|off\|status arguments](assets/screenshots/status-command.png) |
-
-| Approval panel — red/green line diff |
-|:---:|
-| ![Approval panel showing the tool/file header and red/green line diff](assets/screenshots/approval-panel.png) |
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/settings-switch.png" width="440" alt="Master switch in Settings → General"><br><sub>Master switch in Settings → General</sub></td>
+    <td align="center"><img src="assets/screenshots/status-command.png" width="440" alt="The /approval-edit command and its arguments"><br><sub>The /approval-edit command and its arguments</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="assets/screenshots/approval-panel.png" width="760" alt="Approval panel with the red/green line diff"><br><sub>Approval panel — red/green line diff</sub></td>
+  </tr>
+</table>
 
 ## How it works
 
