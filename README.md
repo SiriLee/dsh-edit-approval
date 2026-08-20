@@ -233,6 +233,10 @@ cordis.patch.yml        bundle patch (mounts the host plugin row)
 package.json            dsh.bundle + dsh.client manifests, peerDependencies
 ```
 
+## Security
+
+This plugin reads the target file only to compute the preview diff (at the `tools/pre-execute` interception point); it never writes files itself — the tool body performs the write only after you approve. It makes no network requests and accesses no credentials.
+
 ## License
 
 [MIT](LICENSE)

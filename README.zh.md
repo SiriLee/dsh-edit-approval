@@ -186,6 +186,10 @@ cordis.patch.yml        bundle patch（挂载 host 插件行）
 package.json            dsh.bundle + dsh.client 声明、peerDependencies
 ```
 
+## 安全
+
+本插件仅在 `tools/pre-execute` 拦截点读取目标文件以计算预览 diff，从不自行写入文件——只有在你批准后，工具本体才执行写入。无网络请求，不访问任何凭据。
+
 ## License
 
 [MIT](LICENSE)
