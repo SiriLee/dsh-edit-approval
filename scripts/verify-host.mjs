@@ -96,7 +96,7 @@ check('pre-execute asks for a tracked edit', ask.kind === 'ask', JSON.stringify(
 if (ask.kind === 'ask') {
   check(
     'ask reason carries tool · file and diff markers',
-    /^edit · src\/a\.ts \(modify\)/.test(ask.reason) && /\d+ -before/.test(ask.reason) && /\d+ \+after/.test(ask.reason),
+    /^edit · src\/a\.ts \(modify\)/.test(ask.reason) && /\d+\| -before/.test(ask.reason) && /\d+\| \+after/.test(ask.reason),
     ask.reason.split('\n')[0],
   )
 }

@@ -154,9 +154,9 @@ describe('renderDiff', () => {
 
   it('renders line numbers when requested', () => {
     const text = renderDiff(computeLineDiff('a\nb', 'a\nX'), { lineNumbers: true })
-    // Number first, then the diff marker and content; context rows use
-    // `old:new` so they never read as a change.
-    expect(text.split('\n')).toEqual(['1:1 a', '2 -b', '2 +X'])
+    // Right-aligned number (5-wide gutter), `|`, then the diff marker and
+    // content; context rows use `old:new` so they never read as a change.
+    expect(text.split('\n')).toEqual(['1:1 a', '    2| -b', '    2| +X'])
   })
 
   it('supports custom prefixes', () => {

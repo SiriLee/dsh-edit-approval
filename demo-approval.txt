@@ -1,0 +1,20 @@
+project demo file
+alpha
+BETA-EDITED
+gamma
+delta
+epsilon
+zeta
+eta
+theta
+iota
+kappa
+lambda
+mu
+nu
+XI-EDITED
+omicron
+pi
+rho
+sigma
+tau

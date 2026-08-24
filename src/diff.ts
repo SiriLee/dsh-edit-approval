@@ -115,18 +115,29 @@ export function renderDiff(diff: readonly DiffLine[], options: DiffRenderOptions
   const lineNumbers = options.lineNumbers ?? false
   const total = diff.length
   const shown = maxLines > 0 ? Math.min(total, maxLines) : total
+  // Right-aligned line-number gutter: at least 5 wide, growing to fit the
+  // largest line number in the diff so the `|` column stays aligned.
+  let numberWidth = 5
+  if (lineNumbers) {
+    let max = 0
+    for (const line of diff) {
+      if (line.oldLine !== undefined && line.oldLine > max) max = line.oldLine
+      if (line.newLine !== undefined && line.newLine > max) max = line.newLine
+    }
+    numberWidth = Math.max(5, String(max).length)
+  }
   const lines: string[] = []
   for (let k = 0; k < shown; k += 1) {
     const line = diff[k]!
     let head = options.prefix?.[line.type] ?? DEFAULT_PREFIX[line.type]
     if (lineNumbers) {
       if (line.type === 'add') {
-        head = `${String(line.newLine ?? '')} ${head}`
+        head = `${String(line.newLine ?? '').padStart(numberWidth)}| ${head}`
       } else if (line.type === 'remove') {
-        head = `${String(line.oldLine ?? '')} ${head}`
+        head = `${String(line.oldLine ?? '').padStart(numberWidth)}| ${head}`
       } else if (line.type === 'context') {
-        // Number-first with no leading-space marker; the panel skips context
-        // rows, and the `old:new` colon keeps them distinct from change rows.
+        // `old:new` with no `|`; the panel skips context rows, and the colon
+        // keeps them distinct from the change rows' `NN|` gutter.
         head = `${String(line.oldLine ?? '')}:${String(line.newLine ?? '')} `
       }
       // 'gap' rows carry no line numbers — the prefix alone marks them.

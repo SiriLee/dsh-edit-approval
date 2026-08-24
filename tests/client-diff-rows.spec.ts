@@ -22,9 +22,9 @@ describe('renderDiffRows', () => {
     expect(headline.textContent).toBe('edit · a.ts (modify): 1 insertion, 1 deletion')
   })
 
-  it('renders only number-first change rows, with ellipsis for skipped context', () => {
+  it('renders only change rows (NN| gutter), with ellipsis for skipped context', () => {
     const { classes, texts } = render(
-      'edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 const a = 1\n2:2 const b = 2\n3 -old\n3 +new\n4:4 const c = 4\n5:5 const d = 5',
+      'edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 const a = 1\n2:2 const b = 2\n    3| -old\n    3| +new\n4:4 const c = 4\n5:5 const d = 5',
     )
     expect(classes).toEqual([
       'dsh-ea-diff-context', // header
@@ -33,12 +33,12 @@ describe('renderDiffRows', () => {
       'dsh-ea-diff-add',
       'dsh-ea-diff-ellipsis', // trailing skipped context
     ])
-    expect(texts[2]).toBe('3 -old')
-    expect(texts[3]).toBe('3 +new')
+    expect(texts[2]).toBe('    3| -old')
+    expect(texts[3]).toBe('    3| +new')
   })
 
   it('never misreads a context line whose text starts with - as a removal', () => {
-    const { classes } = render('edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 -webkit-box\n2 -x\n2 +y')
+    const { classes } = render('edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 -webkit-box\n    2| -x\n    2| +y')
     // The `old:new` colon keeps `1:1 -webkit-box` from matching the change
     // pattern; it is skipped, with the run marked by an ellipsis.
     expect(classes).toEqual(['dsh-ea-diff-context', 'dsh-ea-diff-ellipsis', 'dsh-ea-diff-remove', 'dsh-ea-diff-add'])
@@ -46,7 +46,7 @@ describe('renderDiffRows', () => {
 
   it('marks hunk gaps with an ellipsis via the index jump', () => {
     const { classes } = render(
-      'edit · a.ts (modify): 2 insertions, 2 deletions\n3 -a\n3 +A\n ⋯\n9 -b\n9 +B',
+      'edit · a.ts (modify): 2 insertions, 2 deletions\n    3| -a\n    3| +A\n ⋯\n    9| -b\n    9| +B',
     )
     expect(classes).toEqual([
       'dsh-ea-diff-context',

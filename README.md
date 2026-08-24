@@ -12,7 +12,7 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 | Feature | Description |
 | --- | --- |
 | Pre-write approval | Intercepts `write` / `edit` / `str_replace_editor` on the `tools/pre-execute` seam and asks before any file is modified |
-| Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; the approval panel shows only the changed lines — number-first (`NN -old` / `NN +new`) with exact 1-based line numbers — and a `…` ellipsis marks skipped context runs and hunk gaps |
+| Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; the approval panel shows only the changed lines — a right-aligned line-number gutter with `|` (`   15| +XI-EDITED`) — and a `…` ellipsis marks skipped context runs and hunk gaps |
 | Panel collapse | Long diffs can be collapsed via the button at the strip's right end to reveal the agent's output; CSS-only hide/show, expanding restores the exact view |
 | Approve once / reject | Two actions, mirroring the Claude Code edit-approval flow; rejection reports back to the model |
 | Master switch | Settings → General "Edit approval" row, backed by the `/approval-edit on\|off\|status` host command (same source) |
@@ -60,20 +60,20 @@ runs before a tool executes) and matches a whitelist of registered tool names:
    so the approval preview and the post-approval result card derive from the
    same algorithm, and a one-line edit in a large file stays a one-line diff.
 4. **Returns `{ kind: 'ask', reason }`** with a header line (`tool · file
-   (op): N insertions, M deletions`) plus the diff text — number-first
-   change rows (`NN -old` / `NN +new`) with exact 1-based line numbers,
-   plus context rows and `⋯` hunk gaps carried on the same structuredPatch
-   source as the harness result cards. The harness's own `serviceAsk`
-   routes that through `ctx.approval` into the web approval panel — the
-   host needs **zero UI changes**. `allowed-once` proceeds, `rejected`
-   denies the call; every other case delegates via `next()`.
+   (op): N insertions, M deletions`) plus the diff text — change rows with
+   a right-aligned line-number gutter and `|` (`   15| -xi` /
+   `   15| +XI-EDITED`), plus context rows and `⋯` hunk gaps carried on the
+   same structuredPatch source as the harness result cards. The harness's
+   own `serviceAsk` routes that through `ctx.approval` into the web approval
+   panel — the host needs **zero UI changes**. `allowed-once` proceeds,
+   `rejected` denies the call; every other case delegates via `next()`.
 
 The browser half (`dsh.client`) rebuilds the panel's plain-text headline into
-only the changed rows — removals red, additions green, number-first — with a
-`…` ellipsis marking skipped context runs and hunk gaps; it adds a
-`white-space: pre-wrap` compensation for the headline's CSS, installs the
-collapse button on multi-line diffs, and registers the Settings → General
-master-switch row. All side effects live in a single
+only the changed rows — removals red, additions green, with the right-aligned
+`NN|` gutter — and a `…` ellipsis marks skipped context runs and hunk gaps;
+it adds a `white-space: pre-wrap` compensation for the headline's CSS,
+installs the collapse button on multi-line diffs, and registers the
+Settings → General master-switch row. All side effects live in a single
 `ctx.effect` (torn down on plugin unload / HMR), and a per-animation-frame
 `MutationObserver` enhances approval panels as they appear.
 
