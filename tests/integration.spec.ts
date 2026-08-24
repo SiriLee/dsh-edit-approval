@@ -137,8 +137,8 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
       expect(decision.kind).toBe('ask')
       if (decision.kind === 'ask') {
         expect(decision.reason).toMatch(/^edit · src\/a\.ts \(modify\): 1 insertion, 1 deletion$/m)
-        expect(decision.reason).toMatch(/-\d+ before/)
-        expect(decision.reason).toMatch(/\+\d+ after/)
+        expect(decision.reason).toMatch(/\d+ -before/)
+        expect(decision.reason).toMatch(/\d+ \+after/)
       }
     } finally {
       await h.dispose()

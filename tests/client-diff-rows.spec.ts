@@ -22,40 +22,37 @@ describe('renderDiffRows', () => {
     expect(headline.textContent).toBe('edit · a.ts (modify): 1 insertion, 1 deletion')
   })
 
-  it('renders the header muted, context grey, removals red, additions green', () => {
+  it('renders only number-first change rows, with ellipsis for skipped context', () => {
     const { classes, texts } = render(
-      'edit · a.ts (modify): 1 insertion, 1 deletion\n 1:1 const a = 1\n-2 const b = 2\n+2 const B = 2\n 3:3 const c = 3',
+      'edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 const a = 1\n2:2 const b = 2\n3 -old\n3 +new\n4:4 const c = 4\n5:5 const d = 5',
     )
     expect(classes).toEqual([
       'dsh-ea-diff-context', // header
-      'dsh-ea-diff-context', // context line (grey)
+      'dsh-ea-diff-ellipsis', // skipped context rows 1-2
       'dsh-ea-diff-remove',
       'dsh-ea-diff-add',
-      'dsh-ea-diff-context',
+      'dsh-ea-diff-ellipsis', // trailing skipped context
     ])
-    expect(texts[0]).toBe('edit · a.ts (modify): 1 insertion, 1 deletion')
-    expect(texts[1]).toBe(' 1:1 const a = 1')
-    expect(texts[2]).toBe('-2 const b = 2')
-    expect(texts[3]).toBe('+2 const B = 2')
+    expect(texts[2]).toBe('3 -old')
+    expect(texts[3]).toBe('3 +new')
   })
 
-  it('renders the ⋯ hunk gap dim and keeps every emitted line', () => {
-    const { classes, texts } = render(
-      'edit · a.ts (modify): 2 insertions, 2 deletions\n-3 const a = 3\n+3 const A = 3\n ⋯\n-9 const b = 9\n+9 const B = 9',
+  it('never misreads a context line whose text starts with - as a removal', () => {
+    const { classes } = render('edit · a.ts (modify): 1 insertion, 1 deletion\n1:1 -webkit-box\n2 -x\n2 +y')
+    // The `old:new` colon keeps `1:1 -webkit-box` from matching the change
+    // pattern; it is skipped, with the run marked by an ellipsis.
+    expect(classes).toEqual(['dsh-ea-diff-context', 'dsh-ea-diff-ellipsis', 'dsh-ea-diff-remove', 'dsh-ea-diff-add'])
+  })
+
+  it('marks hunk gaps with an ellipsis via the index jump', () => {
+    const { classes } = render(
+      'edit · a.ts (modify): 2 insertions, 2 deletions\n3 -a\n3 +A\n ⋯\n9 -b\n9 +B',
     )
     expect(classes).toEqual([
       'dsh-ea-diff-context',
-      'dsh-ea-diff-remove',
-      'dsh-ea-diff-add',
-      'dsh-ea-diff-ellipsis', // hunk gap
-      'dsh-ea-diff-remove',
-      'dsh-ea-diff-add',
+      'dsh-ea-diff-remove', 'dsh-ea-diff-add',
+      'dsh-ea-diff-ellipsis', // the gap row and its context were skipped
+      'dsh-ea-diff-remove', 'dsh-ea-diff-add',
     ])
-    expect(texts[3]).toBe(' ⋯')
-  })
-
-  it('treats an unknown non-+/- line as grey context (defensive)', () => {
-    const { classes } = render('edit · a.ts (modify): 0 insertions, 0 deletions\n 1:1 a\n… 2 more lines …')
-    expect(classes[1]).toBe('dsh-ea-diff-context')
   })
 })

@@ -121,11 +121,13 @@ export function renderDiff(diff: readonly DiffLine[], options: DiffRenderOptions
     let head = options.prefix?.[line.type] ?? DEFAULT_PREFIX[line.type]
     if (lineNumbers) {
       if (line.type === 'add') {
-        head += `${String(line.newLine ?? '')} `
+        head = `${String(line.newLine ?? '')} ${head}`
       } else if (line.type === 'remove') {
-        head += `${String(line.oldLine ?? '')} `
+        head = `${String(line.oldLine ?? '')} ${head}`
       } else if (line.type === 'context') {
-        head += `${String(line.oldLine ?? '')}:${String(line.newLine ?? '')} `
+        // Number-first with no leading-space marker; the panel skips context
+        // rows, and the `old:new` colon keeps them distinct from change rows.
+        head = `${String(line.oldLine ?? '')}:${String(line.newLine ?? '')} `
       }
       // 'gap' rows carry no line numbers — the prefix alone marks them.
     }
