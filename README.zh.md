@@ -12,7 +12,7 @@
 | 特性 | 说明 |
 | --- | --- |
 | 写前审批 | 在 `tools/pre-execute` 拦截 `write` / `edit` / `str_replace_editor`，任何文件修改前先询问 |
-| 红绿行级 diff | 按各工具语义计算行级 diff（新增 / 删除 / 上下文），审批面板逐行渲染，未变化部分折叠为 `…` |
+| 红绿行级 diff | 按各工具语义计算行级 diff（新增 / 删除 / 上下文），审批面板逐行渲染：精确行号、每侧 3 行灰色上下文（与 harness 结果卡同窗口）、分离 hunk 之间以 `⋯` 间隔 |
 | 面板折叠 | 长 diff 时点击警示条右端的折叠按钮隐藏详情，露出 Agent 输出；纯 CSS 显隐，展开即还原 |
 | 同意一次 / 拒绝 | 两种操作，参照 Claude Code 的 edit approval 流程；拒绝会反馈给模型 |
 | 总开关 | Settings → General 的「编辑前审批」开关，由 `/approval-edit on\|off\|status` host 命令支撑（同源） |
@@ -50,9 +50,9 @@ dsh plugin --profile web add dsh-edit-approval
    - `write` — 全文；`edit` — 唯一替换（或 `replace_all`）；
    - `str_replace_editor` — `str_replace` 唯一替换、`insert` 按行插入、`create` 用 `file_text`。
 3. **计算行级 diff**：用 jsdiff 的 `structuredPatch`（Myers）对当前内容与拟写入内容求 diff——与 harness 的 write/edit 结果卡同一参考实现、同一 3 行上下文窗口，因此**审批预览与执行后的结果卡同源同形**，大文件里改 1 行仍是 1 行 diff。
-4. **返回 `{ kind: 'ask', reason }`**：头部一行（`工具名 · 文件 (操作): N insertions, M deletions`）加 diff 文本。harness 自带的 `serviceAsk` 经 `ctx.approval` 路由到 Web 审批面板——**host 端零 UI 改动**。`allowed-once` 继续执行、`rejected` 拒绝调用；其余情况一律 `next()` 委托后续监听器。
+4. **返回 `{ kind: 'ask', reason }`**：头部一行（`工具名 · 文件 (操作): N insertions, M deletions`）加 diff 文本——` `/`-`/`+` 前缀行带精确的 1-based 行号，分离 hunk 之间以 `⋯` 间隔。harness 自带的 `serviceAsk` 经 `ctx.approval` 路由到 Web 审批面板——**host 端零 UI 改动**。`allowed-once` 继续执行、`rejected` 拒绝调用；其余情况一律 `next()` 委托后续监听器。
 
-浏览器端（`dsh.client`）把面板纯文本 headline 重建为红绿逐行块，注入一条 `white-space: pre-wrap` 补偿样式修复 headline 的 CSS 折叠，为多行 diff 安装折叠按钮，并注册 Settings → General 总开关。所有副作用收敛在单个 `ctx.effect`（插件卸载 / HMR 时完整清理），按动画帧合并的 `MutationObserver` 负责发现并增强审批面板。
+浏览器端（`dsh.client`）把面板纯文本 headline 重建为逐行块——上下文灰色、删除红色、新增绿色、`⋯` 间隔暗色——注入一条 `white-space: pre-wrap` 补偿样式修复 headline 的 CSS 折叠，为多行 diff 安装折叠按钮，并注册 Settings → General 总开关。所有副作用收敛在单个 `ctx.effect`（插件卸载 / HMR 时完整清理），按动画帧合并的 `MutationObserver` 负责发现并增强审批面板。
 
 ## 与审批策略的联动
 

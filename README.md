@@ -12,7 +12,7 @@ Per-edit approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek
 | Feature | Description |
 | --- | --- |
 | Pre-write approval | Intercepts `write` / `edit` / `str_replace_editor` on the `tools/pre-execute` seam and asks before any file is modified |
-| Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; rendered per-line in the approval panel, with unchanged runs collapsed to `…` |
+| Red/green line diff | Line-level diff (added / removed / context) computed per tool semantics; rendered per-line in the approval panel with exact line numbers, a 3-line context window shown grey (the same window as the harness's result cards), and `⋯` between separate hunks |
 | Panel collapse | Long diffs can be collapsed via the button at the strip's right end to reveal the agent's output; CSS-only hide/show, expanding restores the exact view |
 | Approve once / reject | Two actions, mirroring the Claude Code edit-approval flow; rejection reports back to the model |
 | Master switch | Settings → General "Edit approval" row, backed by the `/approval-edit on\|off\|status` host command (same source) |
@@ -60,15 +60,18 @@ runs before a tool executes) and matches a whitelist of registered tool names:
    so the approval preview and the post-approval result card derive from the
    same algorithm, and a one-line edit in a large file stays a one-line diff.
 4. **Returns `{ kind: 'ask', reason }`** with a header line (`tool · file
-   (op): N insertions, M deletions`) plus the diff text. The harness's own
-   `serviceAsk` routes that through `ctx.approval` into the web approval panel
-   — the host needs **zero UI changes**. `allowed-once` proceeds, `rejected`
-   denies the call; every other case delegates via `next()`.
+   (op): N insertions, M deletions`) plus the diff text — ` `/`-`/`+`
+   prefixed lines with exact 1-based line numbers and a `⋯` gap between
+   hunks. The harness's own `serviceAsk` routes that through
+   `ctx.approval` into the web approval panel — the host needs **zero UI
+   changes**. `allowed-once` proceeds, `rejected` denies the call; every
+   other case delegates via `next()`.
 
 The browser half (`dsh.client`) rebuilds the panel's plain-text headline into
-red/green per-line blocks, adds a `white-space: pre-wrap` compensation for the
-headline's CSS, installs the collapse button on multi-line diffs, and registers
-the Settings → General master-switch row. All side effects live in a single
+per-line rows — context grey, removals red, additions green, `⋯` gaps dim —
+adds a `white-space: pre-wrap` compensation for the headline's CSS, installs
+the collapse button on multi-line diffs, and registers the Settings → General
+master-switch row. All side effects live in a single
 `ctx.effect` (torn down on plugin unload / HMR), and a per-animation-frame
 `MutationObserver` enhances approval panels as they appear.
 

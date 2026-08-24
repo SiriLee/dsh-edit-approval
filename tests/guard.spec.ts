@@ -166,8 +166,9 @@ describe('decideApproval', () => {
     expect(result.kind).toBe('ask')
     if (result.kind !== 'ask') return
     expect(result.reason.split('\n')[0]).toMatch(/^edit · src\/a\.ts \(modify\): 1 insertion, 1 deletion$/)
-    expect(result.reason).toContain('-a')
-    expect(result.reason).toContain('+b')
+    // Line numbers ride the diff markers: removals read `-1 a`, additions `+1 b`.
+    expect(result.reason).toMatch(/-\d+ a/)
+    expect(result.reason).toMatch(/\+\d+ b/)
   })
 })
 

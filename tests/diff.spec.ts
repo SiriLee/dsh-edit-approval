@@ -114,16 +114,20 @@ describe('computeLineDiff', () => {
     const newText = '1\n2\nX\n4\n5\n6\n7\n8\n9\n10\n11\nY\n13\n14\n15\n'
     const diff = computeLineDiff(oldText, newText)
     expect(countChangedLines(diff)).toBe(4)
-    // Two independent change blocks; the lines between the hunks (7-8) are
-    // not part of the diff at all.
+    // Two independent change blocks, separated by a gap row; the lines
+    // between the hunks (7-8) are not part of the diff at all.
     expect(typesOf(diff)).toEqual([
       'context', 'context', 'remove', 'add', 'context', 'context', 'context',
+      'gap',
       'context', 'context', 'context', 'remove', 'add', 'context', 'context', 'context',
     ])
+    expect(textsOf(diff)).toEqual(['1', '2', '3', 'X', '4', '5', '6', '⋯', '9', '10', '11', '12', 'Y', '13', '14', '15'])
     const removes = diff.filter(line => line.type === 'remove')
     expect(removes.map(line => line.text)).toEqual(['3', '12'])
     expect(removes[0]?.oldLine).toBe(3)
     expect(removes[1]?.oldLine).toBe(12)
+    // The gap renders as a space-prefixed '⋯' row between the two hunks.
+    expect(renderDiff(diff)).toContain(' ⋯')
   })
 
   it('handles a change in the tail region after a long equal head', () => {
@@ -150,9 +154,8 @@ describe('renderDiff', () => {
 
   it('renders line numbers when requested', () => {
     const text = renderDiff(computeLineDiff('a\nb', 'a\nX'), { lineNumbers: true })
-    expect(text).toContain(' 1:1 a')
-    expect(text).toContain('-2 b')
-    expect(text).toContain('+2 X')
+    // The +/- marker is the diff role; the number follows it once.
+    expect(text.split('\n')).toEqual([' 1:1 a', '-2 b', '+2 X'])
   })
 
   it('supports custom prefixes', () => {

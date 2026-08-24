@@ -200,7 +200,9 @@ export function formatReason(
   const header = `${toolName} · ${filePath} (${operation}): ${summary}`
   const parts = [header]
   if (note !== undefined) parts.push(note)
-  parts.push(renderDiff(diff))
+  // Exact 1-based line numbers come from the hunk start lines; the client
+  // renders them as part of each row.
+  parts.push(renderDiff(diff, { lineNumbers: true }))
   return parts.join('\n')
 }
 

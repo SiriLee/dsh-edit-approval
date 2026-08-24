@@ -8,14 +8,15 @@
  * approval preview and the post-approval result card derive from the same
  * algorithm. Each unified-diff hunk line carries its own role (` ` context,
  * `-` removed, `+` added), which this module maps onto the `+`/`-`/` `
- * prefixed lines shown in the approval panel headline.
+ * prefixed lines shown in the approval panel headline, with exact 1-based
+ * line numbers from the hunk start lines and a `⋯` gap row between hunks.
  *
  * @module dsh-edit-approval/diff
  */
 
 import { structuredPatch } from 'diff'
 
-export type DiffLineType = 'add' | 'remove' | 'context'
+export type DiffLineType = 'add' | 'remove' | 'context' | 'gap'
 
 /** One aligned line of the diff. */
 export interface DiffLine {
@@ -26,6 +27,12 @@ export interface DiffLine {
   /** 1-based new line number; present on add/context lines. */
   readonly newLine?: number
 }
+
+/**
+ * A `gap` line marks the unchanged run between two separate hunks (rendered
+ * as `⋯`). jsdiff already merges hunks whose context windows would overlap,
+ * so a gap row appears only where lines are genuinely skipped.
+ */
 
 /**
  * Context lines shown on each side of an applied hunk. Mirrors
@@ -58,7 +65,9 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
     { context: DIFF_CONTEXT },
   )
   const out: DiffLine[] = []
-  for (const hunk of patch.hunks) {
+  for (let h = 0; h < patch.hunks.length; h += 1) {
+    if (h > 0) out.push({ type: 'gap', text: '⋯' })
+    const hunk = patch.hunks[h]!
     let oldIdx = hunk.oldStart
     let newIdx = hunk.newStart
     for (const raw of hunk.lines) {
@@ -79,16 +88,17 @@ export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   return out
 }
 
-/** Default prefix markers: add is green (`+`), remove is red (`-`), context grey (` `). */
+/** Default prefix markers: add is green (`+`), remove is red (`-`), context grey (` `), hunk gap (`⋯`). */
 export const DEFAULT_PREFIX: Readonly<Record<DiffLineType, string>> = {
   add: '+',
   remove: '-',
   context: ' ',
+  gap: ' ',
 }
 
 export interface DiffRenderOptions {
-  /** Per-type prefix; defaults to {@link DEFAULT_PREFIX}. */
-  readonly prefix?: Readonly<Record<DiffLineType, string>>
+  /** Per-type prefix; missing types fall back to {@link DEFAULT_PREFIX}. */
+  readonly prefix?: Readonly<Partial<Record<DiffLineType, string>>>
   /** Cap on emitted lines; the tail is summarized with "… N more lines". 0 = no cap. */
   readonly maxLines?: number
   /** Prefix 1-based line numbers (old for removals, new for additions, both for context). */
@@ -101,7 +111,6 @@ export interface DiffRenderOptions {
  * panel body scrolls, so a large edit is still reviewable in parts.
  */
 export function renderDiff(diff: readonly DiffLine[], options: DiffRenderOptions = {}): string {
-  const prefix = options.prefix ?? DEFAULT_PREFIX
   const maxLines = options.maxLines ?? 500
   const lineNumbers = options.lineNumbers ?? false
   const total = diff.length
@@ -109,15 +118,16 @@ export function renderDiff(diff: readonly DiffLine[], options: DiffRenderOptions
   const lines: string[] = []
   for (let k = 0; k < shown; k += 1) {
     const line = diff[k]!
-    let head = prefix[line.type]
+    let head = options.prefix?.[line.type] ?? DEFAULT_PREFIX[line.type]
     if (lineNumbers) {
       if (line.type === 'add') {
-        head += `+${String(line.newLine ?? '')} `
+        head += `${String(line.newLine ?? '')} `
       } else if (line.type === 'remove') {
-        head += `-${String(line.oldLine ?? '')} `
-      } else {
+        head += `${String(line.oldLine ?? '')} `
+      } else if (line.type === 'context') {
         head += `${String(line.oldLine ?? '')}:${String(line.newLine ?? '')} `
       }
+      // 'gap' rows carry no line numbers — the prefix alone marks them.
     }
     lines.push(head + line.text)
   }
@@ -127,11 +137,11 @@ export function renderDiff(diff: readonly DiffLine[], options: DiffRenderOptions
   return lines.join('\n')
 }
 
-/** Number of changed lines (additions + removals); context lines do not count. */
+/** Number of changed lines (additions + removals); context and gap rows do not count. */
 export function countChangedLines(diff: readonly DiffLine[]): number {
   let changed = 0
   for (const line of diff) {
-    if (line.type !== 'context') changed += 1
+    if (line.type === 'add' || line.type === 'remove') changed += 1
   }
   return changed
 }

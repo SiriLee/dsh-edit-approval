@@ -24,6 +24,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { EditApprovalRow } from './settings-row.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
+import { renderDiffRows } from './diff-rows.ts'
 import { FocusRestore } from './refocus.ts'
 import { en, NS, zh, type EditApprovalKey } from './locales.ts'
 
@@ -68,10 +69,11 @@ const PREWRAP_STYLE = [
 /**
  * Red/green diff rendering: the panel headlines the reason as plain text
  * (no per-line coloring possible), so this plugin rebuilds the headline as
- * one block per line — `+` lines green, `-` lines red, the rest muted —
- * plus a monospace font to read like a code diff. Purely additive DOM; the
- * panel is mounted once per approval and never re-renders the reason text,
- * so the replacement cannot be clobbered by React.
+ * one block per line — `+` lines green, `-` lines red, grey context (the
+ * host's 3-line window) and `⋯` hunk gaps muted — plus a monospace font to
+ * read like a code diff. Purely additive DOM; the panel is mounted once per
+ * approval and never re-renders the reason text, so the replacement cannot
+ * be clobbered by React.
  */
 const DIFF_STYLE = [
   '[data-approval-key] [data-approval-scroll] > div:first-child {',
@@ -87,44 +89,6 @@ const DIFF_STYLE = [
 
 /** The panel's headline seat (stable data-attribute anchor, same as PREWRAP). */
 const HEADLINE_SELECTOR = '[data-approval-scroll] > div:first-child'
-
-/**
- * Rebuild the headline: keep the header line (tool · file · stats), render
- * only the red/green changed lines, and mark every omitted run of grey
- * context lines with a "…" gap — a big edit stays compact without hiding
- * that rows were skipped. The host reason text stays complete; only this
- * presentation filters it.
- */
-function renderDiffRows(headline: HTMLElement): void {
-  const text = headline.textContent ?? ''
-  if (!text.includes('\n')) return // single-line reason: leave it as-is
-  headline.textContent = ''
-  const lines = text.split('\n')
-  const ellipsis = (): void => {
-    const row = document.createElement('div')
-    row.className = 'dsh-ea-diff-ellipsis'
-    row.textContent = '…'
-    headline.appendChild(row)
-  }
-  // Header line: keep as a muted title.
-  const head = document.createElement('div')
-  head.className = 'dsh-ea-diff-context'
-  head.textContent = lines[0] ?? ''
-  headline.appendChild(head)
-  let lastRendered = 0
-  for (let index = 1; index < lines.length; index += 1) {
-    const line = lines[index]!
-    if (!line.startsWith('+') && !line.startsWith('-')) continue // context omitted
-    if (index > lastRendered + 1) ellipsis() // gap between rendered rows
-    const row = document.createElement('div')
-    row.className = line.startsWith('+') ? 'dsh-ea-diff-add' : 'dsh-ea-diff-remove'
-    row.textContent = line
-    headline.appendChild(row)
-    lastRendered = index
-  }
-  // Trailing context after the last change: mark it too.
-  if (lastRendered < lines.length - 1) ellipsis()
-}
 
 /** Panels already enhanced in this page lifetime. */
 const enhanced = new WeakSet<Element>()
