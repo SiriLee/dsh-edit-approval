@@ -54,10 +54,11 @@ runs before a tool executes) and matches a whitelist of registered tool names:
    - `write` — full text; `edit` — single unique replace (or `replace_all`);
    - `str_replace_editor` — `str_replace` unique replace, `insert` line
      insertion, `create` uses `file_text`.
-3. **Computes a line-level LCS diff** between current and proposed content.
-   Equal head/tail runs are trimmed first so a one-line edit in a large file
-   stays a one-line diff; pathological files fall back to a coarse whole-file
-   diff.
+3. **Computes a line-level diff** between current and proposed content with
+   jsdiff's `structuredPatch` (Myers), the same reference implementation and
+   the same 3-line context window the harness's write/edit result cards use —
+   so the approval preview and the post-approval result card derive from the
+   same algorithm, and a one-line edit in a large file stays a one-line diff.
 4. **Returns `{ kind: 'ask', reason }`** with a header line (`tool · file
    (op): N insertions, M deletions`) plus the diff text. The harness's own
    `serviceAsk` routes that through `ctx.approval` into the web approval panel
@@ -177,7 +178,7 @@ is skipped.
 
 ```
 src/index.ts            host plugin: tools/pre-execute interception + /approval-edit command + settings
-src/diff.ts             line-level diff (pure functions: LCS, head/tail trim, render, counts)
+src/diff.ts             line-level diff (pure functions: jsdiff structuredPatch mapping, render, counts)
 src/guard.ts            decision logic (pure functions: tool matching, thresholds, create/delete, ask/pass)
 src/client/index.ts     client plugin: red/green diff rendering + master switch + lifecycle
 src/client/settings-row.tsx   Settings → General toggle row

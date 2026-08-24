@@ -63,6 +63,9 @@
     "verify:host": "node scripts/verify-host.mjs",
     "prepare": "npm run build"
   },
+  "dependencies": {
+    "diff": "^9.0.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",

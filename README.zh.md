@@ -49,7 +49,7 @@ dsh plugin --profile web add dsh-edit-approval
 2. **读取当前内容**并按工具参数重建**拟写入内容**，镜像各工具语义：
    - `write` — 全文；`edit` — 唯一替换（或 `replace_all`）；
    - `str_replace_editor` — `str_replace` 唯一替换、`insert` 按行插入、`create` 用 `file_text`。
-3. **计算行级 LCS diff**：先裁剪相等头/尾行，大文件里改 1 行仍是 1 行 diff；病态超大文件回退为粗粒度整文件替换。
+3. **计算行级 diff**：用 jsdiff 的 `structuredPatch`（Myers）对当前内容与拟写入内容求 diff——与 harness 的 write/edit 结果卡同一参考实现、同一 3 行上下文窗口，因此**审批预览与执行后的结果卡同源同形**，大文件里改 1 行仍是 1 行 diff。
 4. **返回 `{ kind: 'ask', reason }`**：头部一行（`工具名 · 文件 (操作): N insertions, M deletions`）加 diff 文本。harness 自带的 `serviceAsk` 经 `ctx.approval` 路由到 Web 审批面板——**host 端零 UI 改动**。`allowed-once` 继续执行、`rejected` 拒绝调用；其余情况一律 `next()` 委托后续监听器。
 
 浏览器端（`dsh.client`）把面板纯文本 headline 重建为红绿逐行块，注入一条 `white-space: pre-wrap` 补偿样式修复 headline 的 CSS 折叠，为多行 diff 安装折叠按钮，并注册 Settings → General 总开关。所有副作用收敛在单个 `ctx.effect`（插件卸载 / HMR 时完整清理），按动画帧合并的 `MutationObserver` 负责发现并增强审批面板。
@@ -135,7 +135,7 @@ workflow 会校验 tag 与 `package.json` 版本一致，执行 typecheck + 测�
 
 ```
 src/index.ts            host 插件：tools/pre-execute 拦截 + /approval-edit 命令 + settings
-src/diff.ts             行级 diff（纯函数：LCS、头尾裁剪、渲染、统计）
+src/diff.ts             行级 diff（纯函数：jsdiff structuredPatch 映射、渲染、统计）
 src/guard.ts            决策逻辑（纯函数：工具匹配、阈值、create/delete、ask/放行）
 src/client/index.ts     client 插件：红绿 diff 渲染 + 总开关 + 生命周期
 src/client/settings-row.tsx   Settings → General 开关行

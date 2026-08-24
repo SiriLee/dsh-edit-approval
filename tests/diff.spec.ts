@@ -4,10 +4,7 @@ import {
   countChangedLines,
   countDeletions,
   countInsertions,
-  diffLineArrays,
   renderDiff,
-  splitLines,
-  MAX_LCS_CELLS,
 } from '../src/diff.ts'
 
 function typesOf(diff: ReturnType<typeof computeLineDiff>): string[] {
@@ -18,26 +15,14 @@ function textsOf(diff: ReturnType<typeof computeLineDiff>): string[] {
   return diff.map(line => line.text)
 }
 
-describe('splitLines', () => {
-  it('splits on LF and CRLF; a trailing newline yields a final empty line', () => {
-    expect(splitLines('a\nb')).toEqual(['a', 'b'])
-    expect(splitLines('a\nb\n')).toEqual(['a', 'b', ''])
-    expect(splitLines('a\r\nb')).toEqual(['a', 'b'])
-    expect(splitLines('')).toEqual([])
-    expect(splitLines('solo')).toEqual(['solo'])
-  })
-})
-
 describe('computeLineDiff', () => {
-  it('aligns identical content as context lines', () => {
-    const diff = computeLineDiff('a\nb\nc', 'a\nb\nc')
-    expect(typesOf(diff)).toEqual(['context', 'context', 'context'])
-    expect(textsOf(diff)).toEqual(['a', 'b', 'c'])
-    expect(countChangedLines(diff)).toBe(0)
+  it('returns an empty diff for identical content', () => {
+    expect(computeLineDiff('a\nb\nc', 'a\nb\nc')).toEqual([])
+    expect(countChangedLines([])).toBe(0)
   })
 
   it('marks pure appends as additions', () => {
-    const diff = computeLineDiff('a\nb', 'a\nb\nc\nd')
+    const diff = computeLineDiff('a\nb\n', 'a\nb\nc\nd\n')
     expect(typesOf(diff)).toEqual(['context', 'context', 'add', 'add'])
     expect(countChangedLines(diff)).toBe(2)
     expect(countInsertions(diff)).toBe(2)
@@ -45,7 +30,7 @@ describe('computeLineDiff', () => {
   })
 
   it('marks pure removals as deletions', () => {
-    const diff = computeLineDiff('a\nb\nc', 'a')
+    const diff = computeLineDiff('a\nb\nc\n', 'a\n')
     expect(typesOf(diff)).toEqual(['context', 'remove', 'remove'])
     expect(countChangedLines(diff)).toBe(2)
   })
@@ -63,21 +48,27 @@ describe('computeLineDiff', () => {
   })
 
   it('normalizes CRLF line endings for alignment', () => {
-    const diff = computeLineDiff('a\r\nb', 'a\nb')
-    expect(typesOf(diff)).toEqual(['context', 'context'])
+    // 'a\r\nb' and 'a\nb' are the same text once CRLF is normalized.
+    expect(computeLineDiff('a\r\nb', 'a\nb')).toEqual([])
   })
 
-  it('falls back to whole-file replacement above the LCS cell cap', () => {
-    const size = Math.ceil(Math.sqrt(MAX_LCS_CELLS)) + 10
-    const oldLines = Array.from({ length: size }, (_, i) => `old-${String(i).padStart(5, '0')}`)
-    const newLines = Array.from({ length: size }, (_, i) => `new-${String(i).padStart(5, '0')}`)
-    const diff = diffLineArrays(oldLines, newLines)
-    expect(typesOf(diff)).toEqual([...Array(size).fill('remove'), ...Array(size).fill('add')])
-    expect(diff[0]?.text).toBe(oldLines[0])
-    expect(diff[diff.length - 1]?.text).toBe(newLines[newLines.length - 1])
+  it('shows a trailing-newline-only change as a real -/+ pair (no phantom line)', () => {
+    const diff = computeLineDiff('a\n', 'a')
+    expect(typesOf(diff)).toEqual(['remove', 'add'])
+    expect(textsOf(diff)).toEqual(['a', 'a'])
   })
 
-  it('attaches 1-based line numbers', () => {
+  it('treats an unterminated last line as changed when a line is appended after it', () => {
+    // jsdiff (like git) distinguishes a terminator: appending to a file whose
+    // last line has no trailing newline re-emits that line as -/+. This is
+    // the same basis the harness's result cards use, so the preview stays in
+    // lockstep with them.
+    const diff = computeLineDiff('a\nb\nc', 'a\nb\nc\nappended')
+    expect(typesOf(diff)).toEqual(['context', 'context', 'remove', 'add', 'add'])
+    expect(textsOf(diff)).toEqual(['a', 'b', 'c', 'c', 'appended'])
+  })
+
+  it('attaches 1-based line numbers from the hunk start lines', () => {
     const diff = computeLineDiff('a\nb\nc', 'a\nX\nc')
     const remove = diff.find(line => line.type === 'remove')
     const add = diff.find(line => line.type === 'add')
@@ -92,9 +83,9 @@ describe('computeLineDiff', () => {
     const oldLines = Array.from({ length: 3000 }, (_, i) => `line-${i}`).join('\n')
     const newLines = oldLines.replace('line-100', 'line-100 EDITED')
     const diff = computeLineDiff(oldLines, newLines)
-    // The untrimmed LCS cap would have reported 6000 changed lines (the whole
-    // file). The trim reports exactly the one replaced line, with the
-    // unchanged head/tail preserved as context.
+    // The old untrimmed LCS would have reported 6000 changed lines (the
+    // whole file); structuredPatch reports exactly the replaced line inside
+    // its bounded context window.
     expect(countChangedLines(diff)).toBe(2)
     expect(diff[0]?.type).toBe('context')
     expect(diff[diff.length - 1]?.type).toBe('context')
@@ -104,22 +95,39 @@ describe('computeLineDiff', () => {
     expect(add?.newLine).toBe(101)
   })
 
-  it('preserves 1-based line numbers across a trimmed head and tail', () => {
+  it('carries a 3-line context window on each side of a change', () => {
     const oldText = 'a\nb\nc\nd\ne\nOLD\nf\ng\nh'
     const newText = 'a\nb\nc\nd\ne\nNEW\nf\ng\nh'
     const diff = computeLineDiff(oldText, newText)
     expect(typesOf(diff)).toEqual([
-      'context', 'context', 'context', 'context', 'context',
+      'context', 'context', 'context',
       'remove', 'add',
       'context', 'context', 'context',
     ])
-    expect(textsOf(diff)).toEqual(['a', 'b', 'c', 'd', 'e', 'OLD', 'NEW', 'f', 'g', 'h'])
-    expect(diff[5]?.oldLine).toBe(6)
-    expect(diff[6]?.newLine).toBe(6)
+    expect(textsOf(diff)).toEqual(['c', 'd', 'e', 'OLD', 'NEW', 'f', 'g', 'h'])
+    expect(diff[3]?.oldLine).toBe(6)
+    expect(diff[4]?.newLine).toBe(6)
+  })
+
+  it('emits one hunk per scattered change with a bounded context window', () => {
+    const oldText = '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n'
+    const newText = '1\n2\nX\n4\n5\n6\n7\n8\n9\n10\n11\nY\n13\n14\n15\n'
+    const diff = computeLineDiff(oldText, newText)
+    expect(countChangedLines(diff)).toBe(4)
+    // Two independent change blocks; the lines between the hunks (7-8) are
+    // not part of the diff at all.
+    expect(typesOf(diff)).toEqual([
+      'context', 'context', 'remove', 'add', 'context', 'context', 'context',
+      'context', 'context', 'context', 'remove', 'add', 'context', 'context', 'context',
+    ])
+    const removes = diff.filter(line => line.type === 'remove')
+    expect(removes.map(line => line.text)).toEqual(['3', '12'])
+    expect(removes[0]?.oldLine).toBe(3)
+    expect(removes[1]?.oldLine).toBe(12)
   })
 
   it('handles a change in the tail region after a long equal head', () => {
-    const diff = computeLineDiff('a\nb\nc', 'a\nb\nc\nappended')
+    const diff = computeLineDiff('a\nb\nc\n', 'a\nb\nc\nappended\n')
     expect(typesOf(diff)).toEqual(['context', 'context', 'context', 'add'])
     expect(diff[3]?.newLine).toBe(4)
   })
@@ -132,8 +140,8 @@ describe('renderDiff', () => {
   })
 
   it('caps long diffs and reports the remainder', () => {
-    const oldText = Array.from({ length: 100 }, (_, i) => `line-${i}`).join('\n')
-    const newText = `${oldText}\nappended`
+    const oldText = Array.from({ length: 100 }, (_, i) => `old-${i}`).join('\n')
+    const newText = Array.from({ length: 100 }, (_, i) => `new-${i}`).join('\n')
     const text = renderDiff(computeLineDiff(oldText, newText), { maxLines: 10 })
     const lines = text.split('\n')
     expect(lines.length).toBe(11) // 10 shown + "more lines" tail
