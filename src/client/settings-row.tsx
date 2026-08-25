@@ -6,6 +6,11 @@
  * Registered into the `settings.general.item` slot (Settings → General, same
  * seat as Appearance / permission presets) by `src/client/index.ts`.
  *
+ * The row mirrors the harness's native settings cell (EnterBehaviorRow /
+ * LanguageRow): a 16px vertical rhythm with a hairline separator (the section
+ * strips the separator on its last row), a left column of title (14px) and
+ * description (12px), and the control right-aligned and vertically centered.
+ *
  * The row drives the HOST COMMAND path (`/approval-edit status|on|off`,
  * `/approval-bash status|on|off`), the same route the keyboard user uses —
  * proven reliable, unlike the client settingsScope RPC which could not
@@ -17,7 +22,7 @@
  * @module dsh-edit-approval/client/settings-row
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 
 /** Reactive face injected by the registrant (bound to the feature's toggle command). */
 export interface ApprovalToggleRowInjected {
@@ -32,6 +37,49 @@ type RowKey = 'settings.title' | 'settings.description'
 
 /** Full Settings-row props: the injected face plus the locale `t` seat. */
 type ApprovalToggleRowProps = ApprovalToggleRowInjected & { t: (key: RowKey) => string }
+
+/** Native settings-cell metrics (EnterBehaviorRow.module.css). */
+const ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '16px 0',
+  borderBottom: '1px solid var(--dsw-alias-border-l2, #dee2e6)',
+}
+
+/** Left column: title over description, both vertically centered with the control. */
+const TEXT_STYLE: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+  paddingRight: '48px',
+}
+
+/** Row title: 14px label-primary (native cell title). */
+const TITLE_STYLE: CSSProperties = {
+  fontSize: '14px',
+  fontWeight: 400,
+  lineHeight: '22px',
+  color: 'var(--dsw-alias-label-primary, #212529)',
+}
+
+/** Row description: 12px label-tertiary (native cell description). */
+const DESC_STYLE: CSSProperties = {
+  fontSize: '12px',
+  fontWeight: 400,
+  lineHeight: '18px',
+  color: 'var(--dsw-alias-label-tertiary, #868e96)',
+}
+
+/** The checkbox control, right-aligned by the row flex and vertically centered. */
+const CONTROL_STYLE: CSSProperties = {
+  flex: 'none',
+  width: '16px',
+  height: '16px',
+  cursor: 'pointer',
+}
 
 /**
  * The General-settings toggle row. Copy is read through the harness locale
@@ -51,20 +99,11 @@ export function ApprovalToggleRow({ getStatus, toggle, t }: ApprovalToggleRowPro
   }, [])
   const shown = enabled === true
   return (
-    <label
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '10px 0',
-        fontSize: '14px',
-        cursor: 'pointer',
-      }}
-    >
-      <span>{t('settings.title')}</span>
-      <span style={{ color: 'var(--dsw-alias-label-tertiary, #868e96)' }}>
-        {t('settings.description')}
-      </span>
+    <div style={ROW_STYLE}>
+      <div style={TEXT_STYLE}>
+        <div style={TITLE_STYLE}>{t('settings.title')}</div>
+        <div style={DESC_STYLE}>{t('settings.description')}</div>
+      </div>
       <input
         type="checkbox"
         checked={shown}
@@ -80,7 +119,8 @@ export function ApprovalToggleRow({ getStatus, toggle, t }: ApprovalToggleRowPro
           })
         }}
         aria-label={t('settings.title')}
+        style={CONTROL_STYLE}
       />
-    </label>
+    </div>
   )
 }

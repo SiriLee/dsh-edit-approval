@@ -37,7 +37,7 @@ export type EditApprovalKey = keyof typeof zh
 /** Simplified Chinese dictionary for bash approval (the key-set source of truth). */
 export const bashZh = {
   'settings.title': '命令审批',
-  'settings.description': 'bash 命令执行前审批（支持总是通过列表）',
+  'settings.description': 'bash 命令执行前弹出审批（支持总是通过列表）',
 } as const
 
 /** English dictionary for bash approval. */
