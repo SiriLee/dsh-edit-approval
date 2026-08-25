@@ -17,7 +17,7 @@ export const BASH_NS = 'bash-approval'
 
 /** Simplified Chinese dictionary for edit approval (the key-set source of truth). */
 export const zh = {
-  'settings.title': '编辑前审批',
+  'settings.title': '编辑审批',
   'settings.description': '写类工具（write/edit/str_replace_editor）执行前弹出 diff 审批',
   'approval.collapse': '折叠审批详情',
   'approval.expand': '展开审批详情',
