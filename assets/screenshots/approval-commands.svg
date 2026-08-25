@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="300" viewBox="0 0 440 300" role="img" aria-label="Placeholder: /approval-edit and /approval-bash slash commands">
+  <rect width="440" height="300" fill="#f6f8fa"/>
+  <rect x="1" y="1" width="438" height="298" fill="none" stroke="#d0d7de" stroke-width="2" stroke-dasharray="7 5"/>
+  <g font-family="ui-sans-serif, system-ui, sans-serif">
+    <text x="220" y="104" text-anchor="middle" font-size="12" letter-spacing="3" fill="#57606a">PLACEHOLDER</text>
+    <text x="220" y="126" text-anchor="middle" font-size="13" fill="#57606a">replace with a real screenshot</text>
+    <text x="220" y="158" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="12" fill="#0969da">assets/screenshots/approval-commands.png</text>
+    <text x="220" y="186" text-anchor="middle" font-size="12" fill="#6e7781">Slash commands: /approval-edit and /approval-bash (on | off | status)</text>
+  </g>
+</svg>
