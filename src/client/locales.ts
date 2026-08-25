@@ -18,7 +18,7 @@ export const BASH_NS = 'bash-approval'
 /** Simplified Chinese dictionary for edit approval (the key-set source of truth). */
 export const zh = {
   'settings.title': '编辑审批',
-  'settings.description': '写类工具（write/edit/str_replace_editor）执行前弹出 diff 审批',
+  'settings.description': '修改文件前弹出 diff 审批',
   'approval.collapse': '折叠审批详情',
   'approval.expand': '展开审批详情',
 } as const
@@ -26,7 +26,7 @@ export const zh = {
 /** English dictionary for edit approval. */
 export const en: Record<EditApprovalKey, string> = {
   'settings.title': 'Edit approval',
-  'settings.description': 'Ask before write/edit/str_replace_editor with a line diff',
+  'settings.description': 'Ask before editing files with a line diff',
   'approval.collapse': 'Collapse approval details',
   'approval.expand': 'Expand approval details',
 }
@@ -37,13 +37,13 @@ export type EditApprovalKey = keyof typeof zh
 /** Simplified Chinese dictionary for bash approval (the key-set source of truth). */
 export const bashZh = {
   'settings.title': '命令审批',
-  'settings.description': 'bash 命令执行前弹出审批（支持总是通过列表）',
+  'settings.description': '执行命令前弹出审批',
 } as const
 
 /** English dictionary for bash approval. */
 export const bashEn: Record<BashApprovalKey, string> = {
   'settings.title': 'Bash approval',
-  'settings.description': 'Ask before bash commands (allow-list aware)',
+  'settings.description': 'Ask before running commands',
 }
 
 /** Bash-approval dictionary key union (derived from the zh source of truth). */
