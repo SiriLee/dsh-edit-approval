@@ -121,40 +121,41 @@ describe('decideCommandApproval', () => {
     })
     expect(result.kind).toBe('ask')
     if (result.kind !== 'ask') return
+    // The reason headlines the description only — the panel renders the
+    // command natively, so it must NOT be repeated inside the reason.
     expect(result.reason).toMatch(/^bash · push to remote$/m)
-    expect(result.reason).toContain('$ git push origin main')
+    expect(result.reason).not.toContain('$ ')
   })
 })
 
 describe('formatBashReason', () => {
-  it('shows the header, the verbatim command, and no flags line when absent', () => {
-    const reason = formatBashReason('greet', 'echo  hi', {})
-    expect(reason).toBe('bash · greet\n$ echo  hi')
-  })
-
-  it('keeps the command verbatim (whitespace intact) even when it differs from the normalized form', () => {
-    const reason = formatBashReason('push', 'git  push\norigin', {})
-    expect(reason).toContain('$ git  push\norigin')
+  it('shows the header and no flags line when absent', () => {
+    expect(formatBashReason('greet', {})).toBe('bash · greet')
   })
 
   it('appends a flags line only for present flags', () => {
-    const reason = formatBashReason('deploy', 'npm run deploy', {
+    const reason = formatBashReason('deploy', {
       workdir: '/home/slev/workspace/projects/foo',
       run_in_background: true,
       timeoutMs: 60000,
     })
     expect(reason).toBe(
-      'bash · deploy\n$ npm run deploy\nworkdir: /home/slev/workspace/projects/foo · background · timeout 60000ms',
+      'bash · deploy\nworkdir: /home/slev/workspace/projects/foo · background · timeout 60000ms',
     )
   })
 
   it('flags line omits absent flags', () => {
-    const reason = formatBashReason('deploy', 'npm run deploy', { run_in_background: true })
-    expect(reason).toBe('bash · deploy\n$ npm run deploy\nbackground')
+    expect(formatBashReason('deploy', { run_in_background: true })).toBe('bash · deploy\nbackground')
+  })
+
+  it('never embeds the command text (the panel renders it natively)', () => {
+    const reason = formatBashReason('push', { timeoutMs: 60000 })
+    expect(reason).not.toContain('$ ')
+    expect(reason).not.toContain('git')
   })
 
   it('degrades the header when description is missing or blank', () => {
-    expect(formatBashReason(undefined, 'ls', {})).toBe('bash\n$ ls')
-    expect(formatBashReason('   ', 'ls', {})).toBe('bash\n$ ls')
+    expect(formatBashReason(undefined, {})).toBe('bash')
+    expect(formatBashReason('   ', {})).toBe('bash')
   })
 })

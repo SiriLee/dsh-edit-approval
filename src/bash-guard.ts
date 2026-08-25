@@ -73,13 +73,17 @@ export function isEscalation(args: Readonly<Record<string, unknown>>): boolean {
 
 /**
  * Build the approval reason: a header line mirroring the edit header
- * (`tool · subject`), the verbatim command, and an optional flags line.
- * The command is shown EXACTLY as the model submitted it (whitespace intact)
- * — that is the text the user must judge; normalization is for matching only.
+ * (`tool · subject`) plus an optional flags line.
+ *
+ * Deliberately does NOT repeat the command text: the harness approval panel
+ * renders the command natively from the tool call args (`ApprovalPanel`
+ * `commandOf`), so embedding `$ <command>` here would show the same content
+ * twice — once in the reason headline, once in the panel's command row. The
+ * reason carries only what the panel does not: the model's own description
+ * and the execution flags.
  */
 export function formatBashReason(
   description: unknown,
-  command: string,
   args: Readonly<Record<string, unknown>>,
 ): string {
   const header = typeof description === 'string' && description.trim().length > 0
@@ -93,7 +97,7 @@ export function formatBashReason(
   if (typeof args.timeoutMs === 'number' && Number.isFinite(args.timeoutMs)) {
     flags.push(`timeout ${args.timeoutMs}ms`)
   }
-  const parts = [header, `$ ${command}`]
+  const parts = [header]
   if (flags.length > 0) parts.push(flags.join(' · '))
   return parts.join('\n')
 }
@@ -115,5 +119,5 @@ export function decideCommandApproval(input: BashGuardInput): GuardResult {
   if (typeof command !== 'string') return { kind: 'pass' }
   if (normalizeCommand(command).length === 0) return { kind: 'pass' }
   if (matchesAllow(command, settings.allow)) return { kind: 'pass' }
-  return { kind: 'ask', reason: formatBashReason(args.description, command, args) }
+  return { kind: 'ask', reason: formatBashReason(args.description, args) }
 }

@@ -125,8 +125,8 @@ const bashAsk = await preExecute('bash', { command: 'git push origin main', desc
 check('enabled bash approval asks', bashAsk.kind === 'ask', JSON.stringify(bashAsk))
 if (bashAsk.kind === 'ask') {
   check(
-    'bash ask reason carries description and verbatim command',
-    /^bash · push to remote$/m.test(bashAsk.reason) && /\$ git push origin main/.test(bashAsk.reason),
+    'bash ask reason headlines the description (command renders natively)',
+    /^bash · push to remote$/m.test(bashAsk.reason) && !bashAsk.reason.includes('$ git push'),
     bashAsk.reason.split('\n')[0],
   )
 }

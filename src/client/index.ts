@@ -82,17 +82,21 @@ const PREWRAP_STYLE = [
  * read like a code diff. Purely additive DOM; the panel is mounted once per
  * approval and never re-renders the reason text, so the replacement cannot
  * be clobbered by React.
+ *
+ * Every selector is scoped to the `dsh-ea-kind-diff` marker `enhance()` adds
+ * to the panel root, so the diff look never leaks onto other approval kinds
+ * (bash command approvals keep the panel's native styling).
  */
 const DIFF_STYLE = [
-  '[data-approval-key] [data-approval-scroll] > div:first-child {',
+  '[data-approval-key].dsh-ea-kind-diff [data-approval-scroll] > div:first-child {',
   '  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);',
   '  font-size: 13px;',
   '  line-height: 20px;',
   '}',
-  '[data-approval-key] .dsh-ea-diff-add { color: var(--dsw-alias-state-success-primary, #2f9e44); }',
-  '[data-approval-key] .dsh-ea-diff-remove { color: var(--dsw-alias-state-error-primary, #e03131); }',
-  '[data-approval-key] .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }',
-  '[data-approval-key] .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }',
+  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-add { color: var(--dsw-alias-state-success-primary, #2f9e44); }',
+  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-remove { color: var(--dsw-alias-state-error-primary, #e03131); }',
+  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }',
+  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }',
 ].join('\n')
 
 /** The panel's headline seat (stable data-attribute anchor, same as PREWRAP). */
@@ -118,18 +122,24 @@ function enhance(ctx: ClientContext, panel: Element, t: (key: EditApprovalKey) =
   const key = panel.getAttribute('data-approval-key')
   if (key === null) return false
   if (!hasPendingApproval(ctx, key)) return false // pending not visible yet; a later mutation retries
-  // Red/green diff: rebuild the plain-text headline into colored rows. Only
-  // edit approvals carry a real diff; a plain-text reason (bash approval) is
-  // left untouched — pre-wrap already displays its line structure.
   const headline = panel.querySelector<HTMLElement>(HEADLINE_SELECTOR)
   if (headline !== null) {
     const text = headline.textContent ?? ''
     if (isDiffReason(text)) {
+      // Diff kind (edit approvals): the red/green rebuild plus the collapse
+      // button, and the diff styles scoped to this marker.
+      panel.classList.add('dsh-ea-kind-diff')
       renderDiffRows(headline)
       // Collapse button: only for real (multi-line) diffs, at the strip's right end.
       if (text.includes('\n')) {
         installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') })
       }
+    } else {
+      // Command kind (bash approvals): keep the panel's native look — the
+      // headline shows the short reason and the command row renders natively
+      // from the tool call. Only the kind marker is added; diff styles never
+      // apply here, so the two approval kinds stay visually distinct.
+      panel.classList.add('dsh-ea-kind-command')
     }
   }
   return true

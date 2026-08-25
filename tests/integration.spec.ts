@@ -240,8 +240,10 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
         const decision = await preExecute(h, 'bash', { command: 'git push origin main', description: 'push to remote' })
         expect(decision.kind).toBe('ask')
         if (decision.kind !== 'ask') return
+        // The reason headlines the description only — the panel renders the
+        // command natively, so the reason must not repeat it.
         expect(decision.reason).toMatch(/^bash · push to remote$/m)
-        expect(decision.reason).toContain('$ git push origin main')
+        expect(decision.reason).not.toContain('$ git push')
       } finally {
         await h.dispose()
       }
