@@ -15,13 +15,24 @@
  */
 
 /**
+ * Whether an approval reason is a real line diff: it carries numbered change
+ * rows (`   15| +XI-EDITED`). Edit approvals always do; the bash-approval
+ * reason is plain text (header + `$ command` [+ flags]) and must NOT go
+ * through {@link renderDiffRows} — the rebuild would treat its non-diff lines
+ * as skipped context and collapse the command itself into an ellipsis.
+ */
+export function isDiffReason(text: string): boolean {
+  return /\n\s*\d+\| [+-]/.test(text)
+}
+
+/**
  * Rebuild the headline: keep the header line (tool · file · stats) as a muted
  * title, then render the number-first change rows with their role color.
  * Context rows, ` ⋯` hunk gaps and the capped tail carry no `+`/`-` marker
  * and are omitted, with an ellipsis marking each skipped run between rendered
  * rows. Purely additive DOM; the panel is mounted once per approval and never
  * re-renders the reason text, so the replacement cannot be clobbered by
- * React.
+ * React. Only call this when {@link isDiffReason} is true.
  */
 export function renderDiffRows(headline: HTMLElement): void {
   const text = headline.textContent ?? ''

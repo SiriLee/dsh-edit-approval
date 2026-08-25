@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeLineDiff } from '../src/diff.ts'
 import { formatReason } from '../src/guard.ts'
-import { renderDiffRows } from '../src/client/diff-rows.ts'
+import { isDiffReason, renderDiffRows } from '../src/client/diff-rows.ts'
 
 /**
  * End-to-end display-parity: the approval panel must show EXACTLY the change
@@ -60,5 +60,15 @@ describe('approval display faithfully mirrors the algorithm', () => {
     const rows = renderedChangeRows(formatReason('edit', 'f.ts', 'modify', diff))
     expect(rows).toEqual(expectedChangeRows(diff))
     expect(rows).toHaveLength(6) // 3 removals + 3 additions, one merged hunk
+  })
+
+  it('classifies edit reasons as diffs and bash reasons as plain text', () => {
+    // Edit approvals always carry numbered `|` change rows → diff.
+    expect(isDiffReason('edit · f.ts (modify): 1 insertion, 1 deletion\n   5| +X')).toBe(true)
+    // Bash approvals are plain text (header + verbatim command [+ flags]) → not
+    // a diff, so the client must leave them untouched (pre-wrap only). Feeding
+    // one into renderDiffRows would strip the command down to an ellipsis.
+    expect(isDiffReason('bash · push to remote\n$ git push origin main')).toBe(false)
+    expect(isDiffReason('bash · deploy\n$ npm run deploy\nworkdir: /x · background')).toBe(false)
   })
 })

@@ -29,7 +29,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { ApprovalToggleRow } from './settings-row.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
-import { renderDiffRows } from './diff-rows.ts'
+import { isDiffReason, renderDiffRows } from './diff-rows.ts'
 import { FocusRestore } from './refocus.ts'
 import { BASH_NS, bashEn, bashZh, en, NS, zh, type BashApprovalKey, type EditApprovalKey } from './locales.ts'
 
@@ -118,14 +118,18 @@ function enhance(ctx: ClientContext, panel: Element, t: (key: EditApprovalKey) =
   const key = panel.getAttribute('data-approval-key')
   if (key === null) return false
   if (!hasPendingApproval(ctx, key)) return false // pending not visible yet; a later mutation retries
-  // Red/green diff: rebuild the plain-text headline into colored rows.
+  // Red/green diff: rebuild the plain-text headline into colored rows. Only
+  // edit approvals carry a real diff; a plain-text reason (bash approval) is
+  // left untouched — pre-wrap already displays its line structure.
   const headline = panel.querySelector<HTMLElement>(HEADLINE_SELECTOR)
   if (headline !== null) {
-    const multiLine = (headline.textContent ?? '').includes('\n')
-    renderDiffRows(headline)
-    // Collapse button: only for real (multi-line) diffs, at the strip's right end.
-    if (multiLine) {
-      installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') })
+    const text = headline.textContent ?? ''
+    if (isDiffReason(text)) {
+      renderDiffRows(headline)
+      // Collapse button: only for real (multi-line) diffs, at the strip's right end.
+      if (text.includes('\n')) {
+        installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') })
+      }
     }
   }
   return true
