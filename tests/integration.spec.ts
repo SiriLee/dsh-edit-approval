@@ -249,6 +249,34 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
       }
     })
 
+    it('keeps execution flags (timeout/workdir/background) in the reason while omitting the command', async () => {
+      // The panel's native command row renders only the command string, so
+      // tool-level flags (timeoutMs, workdir, run_in_background) must stay in
+      // the ask reason — the user judges the full execution context.
+      const h = await mount()
+      try {
+        await h.bashSettings.update({ enabled: true })
+        const decision = await preExecute(h, 'bash', {
+          command: 'npm run build',
+          description: 'build the bundle',
+          timeoutMs: 60000,
+          workdir: '/workspace',
+          run_in_background: true,
+        })
+        expect(decision.kind).toBe('ask')
+        if (decision.kind !== 'ask') return
+        expect(decision.reason).toMatch(/^bash · build the bundle$/m)
+        expect(decision.reason).toContain('workdir: /workspace')
+        expect(decision.reason).toContain('background')
+        expect(decision.reason).toContain('timeout 60000ms')
+        // The command itself is rendered natively by the panel; the reason
+        // must not repeat it.
+        expect(decision.reason).not.toContain('npm run build')
+      } finally {
+        await h.dispose()
+      }
+    })
+
     it('passes allow-listed bash commands and normalizes whitespace', async () => {
       const h = await mount()
       try {
