@@ -22,12 +22,12 @@ After installing, Settings → General gains two rows — **编辑审批 / 命�
 
 <table>
   <tr>
-    <td align="center"><img src="assets/screenshots/settings-rows.svg" width="440" alt="Settings → General: Edit approval and Bash approval rows"><br><sub>Master switches in Settings → General</sub></td>
-    <td align="center"><img src="assets/screenshots/edit-approval-panel.svg" width="440" alt="Edit approval panel: red/green line-level diff"><br><sub>Edit approval panel — red/green line diff</sub></td>
+    <td align="center"><img src="assets/screenshots/settings-rows.png" width="440" alt="Settings → General: Edit approval and Bash approval rows"><br><sub>Master switches in Settings → General</sub></td>
+    <td align="center"><img src="assets/screenshots/edit-approval-panel.png" width="440" alt="Edit approval panel: red/green line-level diff"><br><sub>Edit approval panel — red/green line diff</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="assets/screenshots/bash-approval-panel.svg" width="440" alt="Bash approval panel: description headline and command row"><br><sub>Bash approval panel — description + command</sub></td>
-    <td align="center"><img src="assets/screenshots/approval-commands.svg" width="440" alt="/approval-edit and /approval-bash slash commands"><br><sub>/approval-edit and /approval-bash commands</sub></td>
+    <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="Bash approval panel: description headline and command row"><br><sub>Bash approval panel — description + command</sub></td>
+    <td align="center"><img src="assets/screenshots/approval-commands.png" width="440" alt="/approval-edit and /approval-bash slash commands"><br><sub>/approval-edit and /approval-bash commands</sub></td>
   </tr>
 </table>
 

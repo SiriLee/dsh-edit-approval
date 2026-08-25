@@ -22,12 +22,12 @@
 
 <table>
   <tr>
-    <td align="center"><img src="assets/screenshots/settings-rows.svg" width="440" alt="Settings → General：编辑审批与命令审批两行开关"><br><sub>Settings → General 总开关</sub></td>
-    <td align="center"><img src="assets/screenshots/edit-approval-panel.svg" width="440" alt="编辑审批面板：红绿行级 diff"><br><sub>编辑审批面板——红绿行级 diff</sub></td>
+    <td align="center"><img src="assets/screenshots/settings-rows.png" width="440" alt="Settings → General：编辑审批与命令审批两行开关"><br><sub>Settings → General 总开关</sub></td>
+    <td align="center"><img src="assets/screenshots/edit-approval-panel.png" width="440" alt="编辑审批面板：红绿行级 diff"><br><sub>编辑审批面板——红绿行级 diff</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="assets/screenshots/bash-approval-panel.svg" width="440" alt="命令审批面板：描述 headline 与命令行"><br><sub>命令审批面板——描述 + 命令</sub></td>
-    <td align="center"><img src="assets/screenshots/approval-commands.svg" width="440" alt="/approval-edit 与 /approval-bash 命令"><br><sub>/approval-edit 与 /approval-bash 命令</sub></td>
+    <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="命令审批面板：描述 headline 与命令行"><br><sub>命令审批面板——描述 + 命令</sub></td>
+    <td align="center"><img src="assets/screenshots/approval-commands.png" width="440" alt="/approval-edit 与 /approval-bash 命令"><br><sub>/approval-edit 与 /approval-bash 命令</sub></td>
   </tr>
 </table>
 
