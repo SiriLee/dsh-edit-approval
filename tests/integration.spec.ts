@@ -249,10 +249,10 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
       }
     })
 
-    it('keeps execution flags (timeout/workdir/background) in the reason while omitting the command', async () => {
-      // The panel's native command row renders only the command string, so
-      // tool-level flags (timeoutMs, workdir, run_in_background) must stay in
-      // the ask reason — the user judges the full execution context.
+    it('headlines only the description even for flagged calls', async () => {
+      // Division of labor: the ask reason is just the description; the panel
+      // renders the command natively and execution details are not part of
+      // the approved display split.
       const h = await mount()
       try {
         await h.bashSettings.update({ enabled: true })
@@ -265,13 +265,11 @@ describe('host plugin integration (bare cordis context + stub services)', () => 
         })
         expect(decision.kind).toBe('ask')
         if (decision.kind !== 'ask') return
-        expect(decision.reason).toMatch(/^bash · build the bundle$/m)
-        expect(decision.reason).toContain('workdir: /workspace')
-        expect(decision.reason).toContain('background')
-        expect(decision.reason).toContain('timeout 60000ms')
-        // The command itself is rendered natively by the panel; the reason
-        // must not repeat it.
+        expect(decision.reason).toBe('bash · build the bundle')
         expect(decision.reason).not.toContain('npm run build')
+        expect(decision.reason).not.toContain('timeout')
+        expect(decision.reason).not.toContain('workdir')
+        expect(decision.reason).not.toContain('background')
       } finally {
         await h.dispose()
       }

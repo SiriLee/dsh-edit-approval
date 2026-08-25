@@ -72,34 +72,21 @@ export function isEscalation(args: Readonly<Record<string, unknown>>): boolean {
 }
 
 /**
- * Build the approval reason: a header line mirroring the edit header
- * (`tool · subject`) plus an optional flags line.
+ * Build the approval reason: a single header line mirroring the edit header
+ * (`tool · subject`).
  *
- * Deliberately does NOT repeat the command text: the harness approval panel
- * renders the command natively from the tool call args (`ApprovalPanel`
- * `commandOf`), so embedding `$ <command>` here would show the same content
- * twice — once in the reason headline, once in the panel's command row. The
- * reason carries only what the panel does not: the model's own description
- * and the execution flags.
+ * Deliberately minimal by design — the panel's two seats have a strict
+ * division of labor:
+ * - headline (this reason): the model's own description (`bash · …`);
+ * - command row (harness-native, `ApprovalPanel` `commandOf`): the exact
+ *   command string from the tool call args.
+ * The reason therefore must not repeat the command, nor carry execution
+ * flags — the user approved that split.
  */
-export function formatBashReason(
-  description: unknown,
-  args: Readonly<Record<string, unknown>>,
-): string {
-  const header = typeof description === 'string' && description.trim().length > 0
+export function formatBashReason(description: unknown): string {
+  return typeof description === 'string' && description.trim().length > 0
     ? `bash · ${description}`
     : 'bash'
-  const flags: string[] = []
-  if (typeof args.workdir === 'string' && args.workdir.trim().length > 0) {
-    flags.push(`workdir: ${args.workdir}`)
-  }
-  if (args.run_in_background === true) flags.push('background')
-  if (typeof args.timeoutMs === 'number' && Number.isFinite(args.timeoutMs)) {
-    flags.push(`timeout ${args.timeoutMs}ms`)
-  }
-  const parts = [header]
-  if (flags.length > 0) parts.push(flags.join(' · '))
-  return parts.join('\n')
 }
 
 /**
@@ -119,5 +106,5 @@ export function decideCommandApproval(input: BashGuardInput): GuardResult {
   if (typeof command !== 'string') return { kind: 'pass' }
   if (normalizeCommand(command).length === 0) return { kind: 'pass' }
   if (matchesAllow(command, settings.allow)) return { kind: 'pass' }
-  return { kind: 'ask', reason: formatBashReason(args.description, args) }
+  return { kind: 'ask', reason: formatBashReason(args.description) }
 }

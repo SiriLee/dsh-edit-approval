@@ -65,9 +65,8 @@ describe('approval display faithfully mirrors the algorithm', () => {
   it('classifies edit reasons as diffs and bash reasons as plain text', () => {
     // Edit approvals always carry numbered `|` change rows → diff.
     expect(isDiffReason('edit · f.ts (modify): 1 insertion, 1 deletion\n   5| +X')).toBe(true)
-    // Bash approvals are plain text (description + optional flags) → not a
-    // diff, so the client leaves them untouched (native panel styling).
+    // Bash approvals are a single description line → not a diff, so the
+    // client leaves them untouched (native panel styling).
     expect(isDiffReason('bash · push to remote')).toBe(false)
-    expect(isDiffReason('bash · deploy\nworkdir: /x · background · timeout 60000ms')).toBe(false)
   })
 })

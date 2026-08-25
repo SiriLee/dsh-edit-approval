@@ -129,33 +129,24 @@ describe('decideCommandApproval', () => {
 })
 
 describe('formatBashReason', () => {
-  it('shows the header and no flags line when absent', () => {
-    expect(formatBashReason('greet', {})).toBe('bash · greet')
+  it('returns a single header line with the tool and description', () => {
+    expect(formatBashReason('greet')).toBe('bash · greet')
   })
 
-  it('appends a flags line only for present flags', () => {
-    const reason = formatBashReason('deploy', {
-      workdir: '/home/slev/workspace/projects/foo',
-      run_in_background: true,
-      timeoutMs: 60000,
-    })
-    expect(reason).toBe(
-      'bash · deploy\nworkdir: /home/slev/workspace/projects/foo · background · timeout 60000ms',
-    )
-  })
-
-  it('flags line omits absent flags', () => {
-    expect(formatBashReason('deploy', { run_in_background: true })).toBe('bash · deploy\nbackground')
-  })
-
-  it('never embeds the command text (the panel renders it natively)', () => {
-    const reason = formatBashReason('push', { timeoutMs: 60000 })
+  it('never embeds the command text or execution flags (panel seats split)', () => {
+    // Division of labor: the headline carries only the description; the
+    // command row renders the command natively, and execution details are
+    // not part of the approved split.
+    const reason = formatBashReason('push')
+    expect(reason).toBe('bash · push')
     expect(reason).not.toContain('$ ')
     expect(reason).not.toContain('git')
+    expect(reason).not.toContain('timeout')
+    expect(reason).not.toContain('workdir')
   })
 
   it('degrades the header when description is missing or blank', () => {
-    expect(formatBashReason(undefined, {})).toBe('bash')
-    expect(formatBashReason('   ', {})).toBe('bash')
+    expect(formatBashReason(undefined)).toBe('bash')
+    expect(formatBashReason('   ')).toBe('bash')
   })
 })
