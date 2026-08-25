@@ -117,19 +117,6 @@ The config surface is **forward-compatible by contract**: new keys are only ever
 - **Post-edit review / rollback** — covered by the community [dsh-change-review](https://github.com/cirelir/dsh-change-review).
 - **Permission-tier extensions** — covered by the community [dsh-auto-approval-plugin](https://github.com/StyxNether/dsh-auto-approval-plugin).
 
-## Comparison with similar projects
-
-The approval ecosystem around DeepSeek Harness splits by *when* the check happens:
-
-| Dimension | dsh-edit-approval (this plugin) | dsh-auto-approval-plugin | dsh-change-review |
-| --- | --- | --- | --- |
-| Timing | **Before** the action (interactive) | Before the action (automatic) | **After** the action (review) |
-| Edits | Red/green line diff, approve once / reject | Auto-approves by permission tier | Reviews changes that already happened |
-| Commands | Bash approval gate (default off, allow-list) | — | — |
-| Policy | `ask` intercepts, `never` delegates, sandbox untouched | Extends permission tiers | Read-only review |
-
-The essential difference: this plugin gives the human the final say on every write and every command — the two moments where an agent can irreversibly change the world outside the conversation.
-
 ## Compatibility
 
 - Node.js `^22.19.0 || >=24.0.0`.

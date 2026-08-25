@@ -117,19 +117,6 @@ dsh plugin --profile web add dsh-edit-approval
 - **编辑后审查 / 回滚**——由社区 [dsh-change-review](https://github.com/cirelir/dsh-change-review) 覆盖。
 - **权限档位扩展**——由社区 [dsh-auto-approval-plugin](https://github.com/StyxNether/dsh-auto-approval-plugin) 覆盖。
 
-## 与同类项目对比
-
-DeepSeek Harness 的审批生态按检查**时机**分工：
-
-| 维度 | dsh-edit-approval（本项目） | dsh-auto-approval-plugin | dsh-change-review |
-| --- | --- | --- | --- |
-| 时机 | **事前**（交互式） | 事前（自动化） | **事后**（审查） |
-| 编辑 | 红绿行级 diff，同意一次 / 拒绝 | 按权限档位自动放行 | 审查已发生的改动 |
-| 命令 | 命令审批门（默认关，带白名单） | — | — |
-| 策略 | `ask` 拦截、`never` 委托、不碰沙箱 | 扩展权限档位 | 只读审查 |
-
-本质区别：本项目把最终决定权交给人类，覆盖 agent 能不可逆地改变对话外世界的两个时刻——每一次写入、每一条命令。
-
 ## 兼容性
 
 - Node.js `^22.19.0 || >=24.0.0`。
