@@ -1,18 +1,31 @@
 /**
  * dsh-edit-approval — host half.
  *
- * Intercepts `write` / `edit` / `str_replace_editor` at the
- * `tools/pre-execute` waterfall, reads the target file's current content,
- * computes a line-level diff against the proposed content, and returns
- * `{ kind: 'ask', reason }` when a human decision is needed. The harness's
- * own `serviceAsk` routes that decision through `ctx.approval` — the session
- * policy (`ask`/`never`) keeps applying, and an `allowed-once` proceeds
- * while `rejected` denies the call. Every non-blocking case delegates via
- * `next()` so later policy listeners still run.
+ * Two mirror-image approval features on the `tools/pre-execute` waterfall:
  *
- * Runtime state lives in the persisted `edit-approval` settings namespace
- * (schema defaults < cordis row config < user settings page); the
- * `/approval-edit` command manages it.
+ * 1. **edit approval** (`edit-approval` namespace, `/approval-edit` command) —
+ *    intercepts `write` / `edit` / `str_replace_editor`, reads the target
+ *    file's current content, computes a line-level diff against the proposed
+ *    content, and returns `{ kind: 'ask', reason }` when a human decision is
+ *    needed (see `./guard.ts`).
+ * 2. **bash approval** (`bash-approval` namespace, `/approval-bash` command) —
+ *    intercepts `bash` (whitelisted by `tools`), asks for every command that
+ *    is neither allow-listed nor a sandbox escalation (see
+ *    `./bash-guard.ts`). fs-free by design.
+ *
+ * The harness's own `serviceAsk` routes every `ask` through `ctx.approval` —
+ * the session policy (`ask`/`never`) keeps applying, and an `allowed-once`
+ * proceeds while `rejected` denies the call. Every non-blocking case
+ * delegates via `next()` so later policy listeners still run.
+ *
+ * Naming convention: feature/namespace = `<tool>-approval`, user command =
+ * `/approval-<tool>`. New tool families add a NEW namespace + command; existing
+ * namespaces are never modified (compatibility contract: settings fields may
+ * only be added with defaults, never removed or reinterpreted).
+ *
+ * Runtime state lives in the persisted `edit-approval` and `bash-approval`
+ * settings namespaces (schema defaults < cordis row config < user settings
+ * page); the `/approval-edit` and `/approval-bash` commands manage them.
  *
  * @module dsh-edit-approval
  */
@@ -27,9 +40,17 @@ import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-settings'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { decideApproval, targetPathOf, DEFAULT_TOOLS } from './guard.ts'
+import { decideCommandApproval, type BashApprovalSettings } from './bash-guard.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-edit-approval'
+
+/** Default whitelist for the bash-approval feature. */
+export const DEFAULT_BASH_TOOLS: readonly string[] = ['bash']
+
+/** Shared bash-approval defaults — the single source both schemas reference. */
+const BASH_ENABLED_DEFAULT = false
+const BASH_ALLOW_DEFAULT: readonly string[] = []
 
 /** Deployment defaults supplied by the cordis row (profile patch can override). */
 export interface Config {
@@ -43,6 +64,16 @@ export interface Config {
   includeCreate: boolean
   /** Whether clearing/emptying a file asks for approval. */
   includeDelete: boolean
+  /**
+   * Bash-approval row-config overlay (optional; every key optional). The
+   * `bash-approval` settings namespace resolves schema defaults < this base <
+   * user settings page, exactly like the edit half.
+   */
+  bash?: {
+    enabled?: boolean
+    tools?: string[]
+    allow?: string[]
+  }
 }
 
 export const Config: z<Config> = z.object({
@@ -51,17 +82,30 @@ export const Config: z<Config> = z.object({
   minDiffLines: z.number().default(0),
   includeCreate: z.boolean().default(true),
   includeDelete: z.boolean().default(true),
+  // Optional at the Config level (no default): an absent `bash` key stays
+  // absent after validation, so the bash-approval namespace falls back to its
+  // own schema defaults; a present key overrides only the fields it names.
+  bash: z.object({
+    enabled: z.boolean().default(BASH_ENABLED_DEFAULT),
+    tools: z.array(String).default([...DEFAULT_BASH_TOOLS]),
+    allow: z.array(String).default([...BASH_ALLOW_DEFAULT]),
+  }),
 })
 
 /**
- * The settings namespace schema — identical to the row {@link Config} by
- * design (schema defaults < row config < user settings page), so the two can
- * never drift apart.
+ * The bash-approval settings namespace schema. Defaults MUST stay in lockstep
+ * with the `bash` shape above (schema defaults < row config < user layer), so
+ * the two can never drift apart.
  */
-const SettingsSchema = Config
+const BashSchema = z.object({
+  enabled: z.boolean().default(BASH_ENABLED_DEFAULT),
+  tools: z.array(String).default([...DEFAULT_BASH_TOOLS]),
+  allow: z.array(String).default([...BASH_ALLOW_DEFAULT]),
+})
 
-/** Durable settings namespace backing every runtime toggle. */
+/** Durable settings namespaces backing every runtime toggle. */
 const SETTINGS_NAMESPACE = settingsNamespace('edit-approval')
+const BASH_NAMESPACE = settingsNamespace('bash-approval')
 
 /** Parent-traversal probe shared with the fs tools' session-cwd resolution. */
 const PARENT_PATH_SEGMENT = /(?:^|[\\/])\.\.(?:[\\/]|$)/
@@ -83,14 +127,40 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * Mount the host plugin: settings namespace, the two commands, and the
- * `tools/pre-execute` interception.
+ * The session's effective approval policy for one call: its own override,
+ * else the service config default. Mirrored by both approval features — under
+ * `never` (Full access / danger-full-access preset) the plugin stops asking
+ * entirely and delegates, because every `ask` it would emit would be
+ * auto-rejected by the approval service, silently breaking the tools.
+ */
+function resolvePolicy(
+  exec: ToolExecution,
+  approval: unknown,
+): 'ask' | 'never' {
+  if (exec.agent === undefined) return 'ask'
+  const service = approval as
+    | { overrideOf?(session: unknown): string | undefined; config?: { policy?: string } }
+    | undefined
+  const policy = service?.overrideOf?.(exec.agent.session) ?? service?.config?.policy ?? 'ask'
+  return policy === 'never' ? 'never' : 'ask'
+}
+
+/** The approval service face the policy check reads. */
+function approvalService(scope: Context): unknown {
+  return scope.get('approval')
+}
+
+/**
+ * Mount the host plugin: settings namespaces, the four-feature commands, and
+ * the `tools/pre-execute` interception dispatching to the edit or the bash
+ * guard by tool name (edit wins on an overlap; defaults never overlap).
  * @param ctx - plugin context.
  * @param config - deployment defaults from the cordis row.
  */
 export function apply(ctx: Context, config: Config): void {
   ctx.inject(['settings', 'commands', 'fs'], (scope) => {
-    const settings = scope.settings.register(SETTINGS_NAMESPACE, SettingsSchema, { base: config })
+    const settings = scope.settings.register(SETTINGS_NAMESPACE, Config, { base: config })
+    const bashSettings = scope.settings.register(BASH_NAMESPACE, BashSchema, { base: config.bash ?? {} })
 
     // --- `/approval-edit on | off | status` ---
     scope.commands.register({
@@ -110,26 +180,48 @@ export function apply(ctx: Context, config: Config): void {
       },
     })
 
+    // --- `/approval-bash on | off | status` ---
+    scope.commands.register({
+      name: 'approval-bash',
+      description: 'Turn bash command approval on or off',
+      input: { hint: 'on | off | status' },
+      handler: async (invocation) => {
+        const mode = invocation.rawInput.trim()
+        if (mode === 'status') {
+          return { kind: 'success', text: `bash approval is ${bashSettings.get().enabled ? 'on' : 'off'}` }
+        }
+        if (mode === 'on' || mode === 'off') {
+          await bashSettings.update({ enabled: mode === 'on' })
+          return { kind: 'success', text: `bash approval turned ${mode}` }
+        }
+        return { kind: 'error', text: 'usage: /approval-bash on | off | status' }
+      },
+    })
+
     // --- interception ---
     scope.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
       const live = settings.get()
-      if (!live.enabled) return next()
-      if (!live.tools.includes(exec.name)) return next()
+      const bashLive = bashSettings.get()
+      const editActive = live.enabled && live.tools.includes(exec.name)
+      const bashActive = bashLive.enabled && bashLive.tools.includes(exec.name)
+      if (!editActive && !bashActive) return next()
       // A session on the deterministic `never` policy (e.g. the
       // danger-full-access preset) intends FULL access without prompting:
       // every `ask` this plugin emits would be auto-rejected by the approval
-      // service, silently breaking edits. Delegate instead — the sandbox (or
-      // whatever else) keeps enforcing; this plugin just stops asking. The
-      // effective policy folds the session override over the service config.
-      if (exec.agent !== undefined) {
-        const approval = scope.get('approval') as
-          | { overrideOf?(session: unknown): string | undefined; config?: { policy?: string } }
-          | undefined
-        const policy = approval?.overrideOf?.(exec.agent.session) ?? approval?.config?.policy ?? 'ask'
-        if (policy === 'never') return next()
-      }
+      // service, silently breaking edits AND commands. Delegate instead — the
+      // sandbox (or whatever else) keeps enforcing; this plugin just stops
+      // asking. Shared by both mirror features.
+      if (resolvePolicy(exec, approvalService(scope)) === 'never') return next()
       const args = asRecord(exec.arguments)
       if (args === undefined) return next()
+      // Bash branch: fs-free judgment. Edit wins on a tool-name overlap
+      // (default whitelists cannot overlap).
+      if (bashActive && !editActive) {
+        const bashSettingsLive: BashApprovalSettings = bashLive
+        const decision = decideCommandApproval({ settings: bashSettingsLive, toolName: exec.name, args })
+        if (decision.kind === 'ask') return { kind: 'ask', reason: decision.reason }
+        return next()
+      }
       if (exec.name === 'str_replace_editor' && args.command === 'view') return next()
       const filePath = targetPathOf(exec.name, args)
       if (filePath === undefined) return next()

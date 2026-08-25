@@ -2,8 +2,8 @@
 /**
  * Host-half verification against the BUILT artifact (lib/index.js), not the
  * sources: mounts the plugin on a real cordis Context with stub services and
- * drives the `tools/pre-execute` interception, the settings namespace, and
- * both slash commands end to end — no model, no UI.
+ * drives the `tools/pre-execute` interception, the settings namespaces, and
+ * all four slash-command paths end to end — no model, no UI.
  *
  * Run: `npm run build && node scripts/verify-host.mjs` (also wired into CI).
  */
@@ -41,16 +41,27 @@ const ctx = new Context()
 // the session cwd), mirroring how the real fs backend resolves them.
 const files = new Map([['/workspace/src/a.ts', 'before\nunchanged']])
 const commands = []
-const settingsState = {
+const editState = {
   enabled: true,
   tools: ['write', 'edit', 'str_replace_editor'],
   minDiffLines: 0,
   includeCreate: true,
   includeDelete: true,
 }
-const settingsScope = {
-  get: () => ({ ...settingsState }),
-  update: async (patch) => { Object.assign(settingsState, patch) },
+const bashState = {
+  enabled: false,
+  tools: ['bash'],
+  allow: [],
+}
+const editScope = {
+  get: () => ({ ...editState }),
+  update: async (patch) => { Object.assign(editState, patch) },
+  replace: async () => {},
+  watch: () => () => {},
+}
+const bashScope = {
+  get: () => ({ ...bashState }),
+  update: async (patch) => { Object.assign(bashState, patch) },
   replace: async () => {},
   watch: () => () => {},
 }
@@ -67,7 +78,9 @@ ctx.provide('fs', {
   },
 })
 ctx.provide('commands', { register: (d) => { commands.push(d); return () => {} } })
-ctx.provide('settings', { register: () => settingsScope })
+ctx.provide('settings', {
+  register: (ns) => (String(ns) === 'bash-approval' ? bashScope : editScope),
+})
 
 plugin.apply(ctx, {})
 
@@ -77,8 +90,8 @@ const waitFor = (pred) => new Promise((resolve, reject) => {
   const probe = () => (pred() ? resolve() : (Date.now() - t0 > 2000 ? reject(new Error('timeout waiting for mount')) : setTimeout(probe, 1)))
   probe()
 })
-await waitFor(() => commands.length === 1)
-check('plugin mounted (1 command registered)', true, '')
+await waitFor(() => commands.length === 2)
+check('plugin mounted (2 commands registered)', true, '')
 
 const preExecute = (name, args, agent = undefined) => ctx.waterfall(
   ctx,
@@ -101,13 +114,32 @@ if (ask.kind === 'ask') {
   )
 }
 
-const pass = await preExecute('bash', { command: 'echo hi' })
-check('non-whitelisted tool passes through', pass.kind === 'allow', JSON.stringify(pass))
+const bashPass = await preExecute('bash', { command: 'echo hi', description: 'greet' })
+check('disabled bash approval passes commands through', bashPass.kind === 'allow', JSON.stringify(bashPass))
 
-settingsState.enabled = false
+bashState.enabled = true
+const bashAsk = await preExecute('bash', { command: 'git push origin main', description: 'push to remote' }, {
+  id: 'agent-1',
+  session: { header: { cwd: '/workspace' } },
+})
+check('enabled bash approval asks', bashAsk.kind === 'ask', JSON.stringify(bashAsk))
+if (bashAsk.kind === 'ask') {
+  check(
+    'bash ask reason carries description and verbatim command',
+    /^bash · push to remote$/m.test(bashAsk.reason) && /\$ git push origin main/.test(bashAsk.reason),
+    bashAsk.reason.split('\n')[0],
+  )
+}
+bashState.allow = ['git status']
+const bashAllowed = await preExecute('bash', { command: 'git  status --short', description: 'show status' })
+check('allow-listed bash command passes (whitespace-normalized)', bashAllowed.kind === 'allow', JSON.stringify(bashAllowed))
+bashState.enabled = false
+bashState.allow = []
+
+editState.enabled = false
 const disabled = await preExecute('write', { file_path: 'x.ts', content: 'x' })
 check('disabled plugin passes everything through', disabled.kind === 'allow', JSON.stringify(disabled))
-settingsState.enabled = true
+editState.enabled = true
 
 // ---- 4. slash commands ----
 const byName = (n) => commands.find((c) => c.name === n)
@@ -115,6 +147,11 @@ const edit = byName('approval-edit')
 check('approval-edit registered', edit !== undefined, commands.map((c) => c.name).join(','))
 const status = await edit.handler({ rawInput: 'status', agent: { id: 'x' }, signal: new AbortController().signal })
 check('approval-edit status reflects enabled', status.kind === 'success' && status.text.includes('on'), JSON.stringify(status))
+
+const bash = byName('approval-bash')
+check('approval-bash registered', bash !== undefined, commands.map((c) => c.name).join(','))
+const bashStatus = await bash.handler({ rawInput: 'status', agent: { id: 'x' }, signal: new AbortController().signal })
+check('approval-bash status reflects disabled default', bashStatus.kind === 'success' && bashStatus.text.includes('off'), JSON.stringify(bashStatus))
 
 console.log(failures === 0 ? '\nverify-host: all checks passed' : `\nverify-host: ${failures} check(s) FAILED`)
 process.exit(failures === 0 ? 0 : 1)

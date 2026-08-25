@@ -3,13 +3,18 @@
  *
  * Rebuilds the approval panel's diff headline as red/green per-line blocks
  * (the reason is plain text; per-line coloring is impossible without this)
- * and registers the edit-approval master switch into Settings → General.
+ * and registers the two feature master switches into Settings → General:
+ * "Edit approval" (`edit-approval`) and "Bash approval" (`bash-approval`).
  *
  * Pure DOM injection: no new page, no new popup — the panel's stable data
  * attribute is the only anchor. The tool name comes from the session's
  * pending approval payload (`session.getSnapshot().pending`), so the host
  * command receives the exact tool that is asking. All side effects are
  * registered as one `ctx.effect`, so plugin unload / HMR tears them down.
+ *
+ * The bash feature needs NO panel enhancement: the diff coloring, collapse
+ * button, and focus restore are panel-level and apply to every approval —
+ * multi-line commands already get `pre-wrap` and long ones the collapse.
  *
  * @module dsh-edit-approval/client
  */
@@ -22,30 +27,33 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale service merge (`ctx.locale`) and the slot
 // declaration; runtime copy comes from the locale dictionary below.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import { EditApprovalRow } from './settings-row.tsx'
+import { ApprovalToggleRow } from './settings-row.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
 import { renderDiffRows } from './diff-rows.ts'
 import { FocusRestore } from './refocus.ts'
-import { en, NS, zh, type EditApprovalKey } from './locales.ts'
+import { BASH_NS, bashEn, bashZh, en, NS, zh, type BashApprovalKey, type EditApprovalKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The edit-approval Settings → General row copy. */
     'edit-approval': EditApprovalKey
+    /** The bash-approval Settings → General row copy. */
+    'bash-approval': BashApprovalKey
   }
 }
 
 /** Stable plugin name. */
 export const name = 'dsh-edit-approval/client'
 
-/** Required services: sessions (pending approvals), slots (the settings row), locale (row copy), settingsScope (read the switch). */
+/** Required services: sessions (pending approvals), slots (the settings rows), locale (row copy), settingsScope (read the switches). */
 export const inject = ['sessions', 'slots', 'locale', 'settingsScope']
 
-/** Settings namespace backing the runtime toggle (mirrors the host plugin). */
+/** Settings namespaces backing the runtime toggles (mirror the host plugin). */
 const SETTINGS_NAMESPACE = 'edit-approval'
+const BASH_SETTINGS_NAMESPACE = 'bash-approval'
 
-/** The enabled flag the settings row reads (a subset of the host schema). */
-interface EditApprovalClientSettings {
+/** The enabled flag the settings rows read (a subset of the host schemas). */
+interface ApprovalClientSettings {
   enabled: boolean
 }
 
@@ -134,12 +142,12 @@ function scan(ctx: ClientContext, t: (key: EditApprovalKey) => string): void {
 }
 
 /**
- * Read the latest `/approval-edit` command outcome ("... is on/off") at or
+ * Read the latest `<commandName>` command outcome ("... is on/off") at or
  * after `fromIndex` in the chat order from the session snapshot, or null when
  * none has settled yet. The index baseline lets a caller wait for a FRESH
  * outcome instead of the stale one from a command it just issued.
  */
-function approvalEditStatus(session: SessionFace, fromIndex = 0): boolean | null {
+function approvalStatus(session: SessionFace, fromIndex = 0, commandName = 'approval-edit'): boolean | null {
   let last: string | undefined
   const snapshot = session.getSnapshot()
   for (let index = fromIndex; index < snapshot.chat.order.length; index += 1) {
@@ -147,7 +155,7 @@ function approvalEditStatus(session: SessionFace, fromIndex = 0): boolean | null
     const node = snapshot.chat.nodes.get(key)
     if (node?.kind !== 'command') continue
     const command = node.data as { name?: string; outcome?: { kind?: string; text?: string } }
-    if (command.name === 'approval-edit' && command.outcome?.text !== undefined) {
+    if (command.name === commandName && command.outcome?.text !== undefined) {
       last = command.outcome.text
     }
   }
@@ -164,15 +172,16 @@ function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
 }
 
 /**
- * Wait until an approval-edit command outcome at/after `base` (the chat order
+ * Wait until a `<commandName>` command outcome at/after `base` (the chat order
  * length captured BEFORE dispatching the command) settles in the session
  * snapshot. Settling on the command's own baselined outcome guarantees we
  * read what that command committed — never a stale earlier outcome. Resolves
  * `null` on timeout.
  */
-async function waitForApprovalEditOutcome(
+async function waitForApprovalOutcome(
   session: SessionFace,
   base: number,
+  commandName: string,
   timeoutMs = 4000,
 ): Promise<boolean | null> {
   return await new Promise<boolean | null>((resolve) => {
@@ -186,7 +195,7 @@ async function waitForApprovalEditOutcome(
       resolve(value)
     }
     const check = (): void => {
-      const value = approvalEditStatus(session, base)
+      const value = approvalStatus(session, base, commandName)
       if (value !== null) settle(value)
     }
     const unsubscribe = session.subscribe(check)
@@ -196,21 +205,59 @@ async function waitForApprovalEditOutcome(
 }
 
 /** Read the master switch from the settings scope, or null until it settles. */
-function readEnabled(scope: SettingsScope<EditApprovalClientSettings>): boolean | null {
+function readEnabled(scope: SettingsScope<ApprovalClientSettings>): boolean | null {
   const snapshot = scope.getSnapshot()
   return snapshot.status === 'ready' && snapshot.value !== undefined ? snapshot.value.enabled : null
 }
 
+/** The Settings → General row face bound to one feature's host command. */
+function toggleRow(ctx: ClientContext, commandName: string, namespace: string) {
+  const settingsScope = ctx.settingsScope.bind<ApprovalClientSettings>({ namespace })
+  return {
+    getStatus: async (): Promise<boolean | null> => {
+      const immediate = readEnabled(settingsScope)
+      if (immediate !== null) return immediate
+      // Still loading: wait for the first settled snapshot, then resolve
+      // null so the row stays disabled rather than guessing.
+      return await new Promise<boolean | null>((resolve) => {
+        let settled = false
+        const settle = (value: boolean | null): void => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          unsubscribe()
+          resolve(value)
+        }
+        const unsubscribe = settingsScope.subscribe(() => {
+          const value = readEnabled(settingsScope)
+          if (value !== null) settle(value)
+        })
+        const timer = setTimeout(() => settle(null), 4000)
+      })
+    },
+    // Resolves with the value the host committed: the toggle command's
+    // own baselined outcome, not a later guess.
+    toggle: async (next: boolean): Promise<boolean | null> => {
+      const session = currentSessionOf(ctx)
+      if (session === undefined) return null
+      const base = session.getSnapshot().chat.order.length
+      await session.command(`/${commandName} ${next ? 'on' : 'off'}`)
+      return await waitForApprovalOutcome(session, base, commandName)
+    },
+  }
+}
+
 /**
- * Mount the browser half: inject the diff styles, register the
- * Settings → General master-switch row, and observe approval panels to
+ * Mount the browser half: inject the diff styles, register the two
+ * Settings → General master-switch rows, and observe approval panels to
  * enhance them. Disposal unwinds everything.
  * @param ctx - client root context carrying `sessions`, `slots`.
  */
 export function apply(ctx: ClientContext): void {
-  // Locale dictionary: the Settings → General row copy follows the user's dsh
-  // language preference. Registered once for the plugin's lifetime.
+  // Locale dictionaries: the Settings → General row copy follows the user's
+  // dsh language preference. Registered once for the plugin's lifetime.
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-edit-approval: locale dictionaries')
+  ctx.effect(() => ctx.locale.register(BASH_NS, { zh: bashZh, en: bashEn }), 'dsh-edit-approval: bash locale dictionaries')
 
   // Bound translate seat for the panel copy (collapse/expand labels).
   const t = ctx.locale.bind(NS)
@@ -221,51 +268,26 @@ export function apply(ctx: ClientContext): void {
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}\n${COLLAPSE_STYLE}`
     document.head.appendChild(style)
 
-    // Settings → General row: the edit-approval master switch. Reads go
+    // Settings → General rows: the two feature master switches. Reads go
     // through the local settings scope (no session command, so opening the
-    // settings page never prints `/approval-edit` into the chat); writes go
-    // through the host `/approval-edit on|off` command — the route proven to
-    // persist, unlike the client settingsScope write for this namespace.
-    // `locale: NS` synthesizes the `t` seat on the row's props.
-    const settingsScope = ctx.settingsScope.bind<EditApprovalClientSettings>({ namespace: SETTINGS_NAMESPACE })
-    const unbindRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    // settings page never prints `/approval-*` into the chat); writes go
+    // through the host toggle commands — the route proven to persist, unlike
+    // the client settingsScope write for this namespace. `locale: NS`
+    // synthesizes the `t` seat on the row's props.
+    const unbindEditRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
       name: 'settings.general.item',
       id: 'edit-approval',
       order: 30,
       locale: NS,
-      inject: () => ({
-        getStatus: async (): Promise<boolean | null> => {
-          const immediate = readEnabled(settingsScope)
-          if (immediate !== null) return immediate
-          // Still loading: wait for the first settled snapshot, then resolve
-          // null so the row stays disabled rather than guessing.
-          return await new Promise<boolean | null>((resolve) => {
-            let settled = false
-            const settle = (value: boolean | null): void => {
-              if (settled) return
-              settled = true
-              clearTimeout(timer)
-              unsubscribe()
-              resolve(value)
-            }
-            const unsubscribe = settingsScope.subscribe(() => {
-              const value = readEnabled(settingsScope)
-              if (value !== null) settle(value)
-            })
-            const timer = setTimeout(() => settle(null), 4000)
-          })
-        },
-        // Resolves with the value the host committed: the toggle command's
-        // own baselined outcome, not a later guess.
-        toggle: async (next: boolean): Promise<boolean | null> => {
-          const session = currentSessionOf(ctx)
-          if (session === undefined) return null
-          const base = session.getSnapshot().chat.order.length
-          await session.command(`/approval-edit ${next ? 'on' : 'off'}`)
-          return await waitForApprovalEditOutcome(session, base)
-        },
-      }),
-    }, EditApprovalRow))
+      inject: () => toggleRow(ctx, 'approval-edit', SETTINGS_NAMESPACE),
+    }, ApprovalToggleRow))
+    const unbindBashRow = ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item',
+      id: 'bash-approval',
+      order: 31,
+      locale: BASH_NS,
+      inject: () => toggleRow(ctx, 'approval-bash', BASH_SETTINGS_NAMESPACE),
+    }, ApprovalToggleRow))
 
     let observer: MutationObserver | undefined
     let scanFrame: number | undefined
@@ -313,7 +335,8 @@ export function apply(ctx: ClientContext): void {
     else document.addEventListener('DOMContentLoaded', onReady, { once: true })
 
     yield () => {
-      unbindRow()
+      unbindEditRow()
+      unbindBashRow()
       observer?.disconnect()
       if (scanFrame !== undefined) cancelAnimationFrame(scanFrame)
       document.removeEventListener('focusin', focusRestore.onFocusIn, true)

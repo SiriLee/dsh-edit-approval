@@ -1,40 +1,44 @@
 /**
- * General-settings row for the edit-approval master switch.
+ * General-settings toggle row shared by the edit- and bash-approval master
+ * switches (one component, two registrations — mirror features stay in
+ * lockstep by construction).
  *
  * Registered into the `settings.general.item` slot (Settings → General, same
  * seat as Appearance / permission presets) by `src/client/index.ts`.
  *
- * The row drives the HOST COMMAND path (`/approval-edit status|on|off`), the
- * same route the keyboard user uses — proven reliable, unlike the client
- * settingsScope RPC which could not persist writes for this namespace. The
- * checkbox flips an optimistic local state on click (instant feedback), then
- * settles on the value the toggle command itself committed — deterministic,
- * no polling delay, no snap-back to a previous outcome.
+ * The row drives the HOST COMMAND path (`/approval-edit status|on|off`,
+ * `/approval-bash status|on|off`), the same route the keyboard user uses —
+ * proven reliable, unlike the client settingsScope RPC which could not
+ * persist writes for this namespace. The checkbox flips an optimistic local
+ * state on click (instant feedback), then settles on the value the toggle
+ * command itself committed — deterministic, no polling delay, no snap-back
+ * to a previous outcome.
  *
  * @module dsh-edit-approval/client/settings-row
  */
 
 import { useEffect, useState } from 'react'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { NS } from './locales.ts'
 
-/** Reactive face injected by the registrant (bound to the /approval-edit command). */
-export interface EditApprovalRowInjected {
-  /** Resolve the current host enabled state via `/approval-edit status`. */
+/** Reactive face injected by the registrant (bound to the feature's toggle command). */
+export interface ApprovalToggleRowInjected {
+  /** Resolve the current host enabled state via the feature's `status` command. */
   getStatus(): Promise<boolean | null>
   /** Persist the given enabled state; resolves with the value the host committed. */
   toggle(next: boolean): Promise<boolean | null>
 }
 
+/** The row copy keys every feature dictionary shares (both namespaces carry them). */
+type RowKey = 'settings.title' | 'settings.description'
+
 /** Full Settings-row props: the injected face plus the locale `t` seat. */
-type EditApprovalRowProps = EditApprovalRowInjected & PropsLocale<typeof NS>
+type ApprovalToggleRowProps = ApprovalToggleRowInjected & { t: (key: RowKey) => string }
 
 /**
  * The General-settings toggle row. Copy is read through the harness locale
  * seat (`t`), so it follows the user's dsh language preference.
  * @param props - the injected face and the locale `t` seat.
  */
-export function EditApprovalRow({ getStatus, toggle, t }: EditApprovalRowProps) {
+export function ApprovalToggleRow({ getStatus, toggle, t }: ApprovalToggleRowProps) {
   const [enabled, setEnabled] = useState<boolean | null>(null)
   useEffect(() => {
     let alive = true

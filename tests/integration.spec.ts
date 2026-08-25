@@ -26,6 +26,7 @@ interface Harness {
   files: Map<string, string>
   commands: Array<{ name: string; handler: (invocation: { rawInput: string }) => unknown }>
   settings: StubScope
+  bashSettings: StubScope
   dispose(): Promise<void>
 }
 
@@ -51,12 +52,20 @@ const SETTINGS_DEFAULTS: Record<string, unknown> = {
   includeDelete: true,
 }
 
+/** Bash-approval schema defaults; the stub mimics them. */
+const BASH_DEFAULTS: Record<string, unknown> = {
+  enabled: false,
+  tools: ['bash'],
+  allow: [],
+}
+
 /** Mount the host plugin on a bare cordis Context with stub services. */
 async function mount(options: { approvalPolicy?: 'ask' | 'never' } = {}): Promise<Harness> {
   const ctx = new Context()
   const files = new Map<string, string>()
   const commands: Harness['commands'] = []
   let settings: StubScope = stubScope({})
+  let bashSettings: StubScope = stubScope({})
 
   ctx.provide('fs', {
     resolve: async (path: string) => ({ targetKey: path, displayPath: path }),
@@ -72,7 +81,12 @@ async function mount(options: { approvalPolicy?: 'ask' | 'never' } = {}): Promis
     },
   })
   ctx.provide('settings', {
-    register: (_ns: unknown, _schema: unknown, options?: { base?: Record<string, unknown> }) => {
+    register: (ns: unknown, _schema: unknown, options?: { base?: Record<string, unknown> }) => {
+      // One stub scope per feature namespace, mirroring the host registrations.
+      if (String(ns) === 'bash-approval') {
+        bashSettings = stubScope({ ...BASH_DEFAULTS, ...options?.base })
+        return bashSettings
+      }
       settings = stubScope({ ...SETTINGS_DEFAULTS, ...options?.base })
       return settings
     },
@@ -89,13 +103,14 @@ async function mount(options: { approvalPolicy?: 'ask' | 'never' } = {}): Promis
   const fiber = ctx.plugin(plugin as never)
   // The dynamic ctx.inject callback registers the listener and commands on a
   // later tick; the harness must observe the fully mounted plugin.
-  await waitFor(() => commands.length === 1)
+  await waitFor(() => commands.length === 2)
 
   return {
     ctx,
     files,
     commands,
     settings,
+    bashSettings,
     dispose: () => fiber.dispose(),
   }
 }
@@ -129,95 +144,199 @@ function preExecuteAsAgent(h: Harness, name: string, args: Record<string, unknow
 }
 
 describe('host plugin integration (bare cordis context + stub services)', () => {
-  it('asks for an edit that changes an existing file', async () => {
-    const h = await mount()
-    try {
-      h.files.set('src/a.ts', 'before\nunchanged')
-      const decision = await preExecute(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
-      expect(decision.kind).toBe('ask')
-      if (decision.kind === 'ask') {
-        expect(decision.reason).toMatch(/^edit · src\/a\.ts \(modify\): 1 insertion, 1 deletion$/m)
-        expect(decision.reason).toMatch(/\d+\| -before/)
-        expect(decision.reason).toMatch(/\d+\| \+after/)
+  describe('edit approval (mirror baseline)', () => {
+    it('asks for an edit that changes an existing file', async () => {
+      const h = await mount()
+      try {
+        h.files.set('src/a.ts', 'before\nunchanged')
+        const decision = await preExecute(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
+        expect(decision.kind).toBe('ask')
+        if (decision.kind === 'ask') {
+          expect(decision.reason).toMatch(/^edit · src\/a\.ts \(modify\): 1 insertion, 1 deletion$/m)
+          expect(decision.reason).toMatch(/\d+\| -before/)
+          expect(decision.reason).toMatch(/\d+\| \+after/)
+        }
+      } finally {
+        await h.dispose()
       }
-    } finally {
-      await h.dispose()
-    }
+    })
+
+    it('passes through under the never policy instead of auto-rejecting edits', async () => {
+      // Full access (danger-full-access preset) intends no prompting: an `ask`
+      // here would be deterministically rejected by the approval service and
+      // silently break every edit. The plugin must delegate.
+      const h = await mount({ approvalPolicy: 'never' })
+      try {
+        h.files.set('src/a.ts', 'before\nunchanged')
+        const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('still asks under the ask policy with a caller agent', async () => {
+      const h = await mount({ approvalPolicy: 'ask' })
+      try {
+        h.files.set('src/a.ts', 'before\nunchanged')
+        const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
+        expect(decision.kind).toBe('ask')
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('passes when the plugin is disabled', async () => {
+      const h = await mount()
+      try {
+        await h.settings.update({ enabled: false })
+        const decision = await preExecute(h, 'write', { file_path: 'a.ts', content: 'x' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('passes on str_replace_editor view commands', async () => {
+      const h = await mount()
+      try {
+        const decision = await preExecute(h, 'str_replace_editor', { command: 'view', path: '/x' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('does not break when the preview read fails', async () => {
+      const h = await mount()
+      try {
+        h.files.set('broken', 'x')
+        // Force readText to throw for this path.
+        const original = h.ctx.get('fs') as { readText: (t: { displayPath: string }) => Promise<string> }
+        original.readText = async () => { throw new Error('boom') }
+        const decision = await preExecute(h, 'write', { file_path: 'broken', content: 'y' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
   })
 
-  it('passes through under the never policy instead of auto-rejecting edits', async () => {
-    // Full access (danger-full-access preset) intends no prompting: an `ask`
-    // here would be deterministically rejected by the approval service and
-    // silently break every edit. The plugin must delegate.
-    const h = await mount({ approvalPolicy: 'never' })
-    try {
-      h.files.set('src/a.ts', 'before\nunchanged')
-      const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
-      expect(decision).toEqual({ kind: 'allow' })
-    } finally {
-      await h.dispose()
-    }
+  describe('bash approval (mirror of edit approval)', () => {
+    it('passes bash commands by default (bash approval off)', async () => {
+      const h = await mount()
+      try {
+        const decision = await preExecute(h, 'bash', { command: 'git push', description: 'push' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('asks for a bash command when bash approval is enabled', async () => {
+      const h = await mount()
+      try {
+        await h.bashSettings.update({ enabled: true })
+        const decision = await preExecute(h, 'bash', { command: 'git push origin main', description: 'push to remote' })
+        expect(decision.kind).toBe('ask')
+        if (decision.kind !== 'ask') return
+        expect(decision.reason).toMatch(/^bash · push to remote$/m)
+        expect(decision.reason).toContain('$ git push origin main')
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('passes allow-listed bash commands and normalizes whitespace', async () => {
+      const h = await mount()
+      try {
+        await h.bashSettings.update({ enabled: true, allow: ['git status'] })
+        const direct = await preExecute(h, 'bash', { command: 'git status --short', description: 'show status' })
+        expect(direct).toEqual({ kind: 'allow' })
+        // Whitespace variation must not bypass the allow list.
+        const sneaky = await preExecute(h, 'bash', { command: 'git  status --short', description: 'show status' })
+        expect(sneaky).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('passes bash escalation calls (the escalation approval gates them)', async () => {
+      const h = await mount()
+      try {
+        await h.bashSettings.update({ enabled: true })
+        const decision = await preExecute(h, 'bash', {
+          command: 'rm -rf /etc',
+          description: 'cleanup',
+          sandbox_permissions: 'danger-full-access',
+          justification: 'test cleanup',
+        })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('passes through bash under the never policy', async () => {
+      // Mirror of the edit half: Full access intends no prompting, so bash
+      // commands must delegate too instead of being auto-rejected.
+      const h = await mount({ approvalPolicy: 'never' })
+      try {
+        await h.bashSettings.update({ enabled: true })
+        const decision = await preExecuteAsAgent(h, 'bash', { command: 'git push', description: 'push' })
+        expect(decision).toEqual({ kind: 'allow' })
+      } finally {
+        await h.dispose()
+      }
+    })
+
+    it('asks under the ask policy with a caller agent', async () => {
+      const h = await mount({ approvalPolicy: 'ask' })
+      try {
+        await h.bashSettings.update({ enabled: true })
+        const decision = await preExecuteAsAgent(h, 'bash', { command: 'git push', description: 'push' })
+        expect(decision.kind).toBe('ask')
+      } finally {
+        await h.dispose()
+      }
+    })
   })
 
-  it('still asks under the ask policy with a caller agent', async () => {
-    const h = await mount({ approvalPolicy: 'ask' })
-    try {
-      h.files.set('src/a.ts', 'before\nunchanged')
-      const decision = await preExecuteAsAgent(h, 'edit', { file_path: 'src/a.ts', old_string: 'before', new_string: 'after' })
-      expect(decision.kind).toBe('ask')
-    } finally {
-      await h.dispose()
-    }
-  })
+  describe('slash commands', () => {
+    it('registers both approval commands', async () => {
+      const h = await mount()
+      try {
+        const names = h.commands.map(command => command.name).sort()
+        expect(names).toEqual(['approval-bash', 'approval-edit'])
+      } finally {
+        await h.dispose()
+      }
+    })
 
-  it('passes when the plugin is disabled', async () => {
-    const h = await mount()
-    try {
-      await h.settings.update({ enabled: false })
-      const decision = await preExecute(h, 'write', { file_path: 'a.ts', content: 'x' })
-      expect(decision).toEqual({ kind: 'allow' })
-    } finally {
-      await h.dispose()
-    }
-  })
+    it('registers the /approval-edit command', async () => {
+      const h = await mount()
+      try {
+        const edit = h.commands.find(command => command.name === 'approval-edit')!
+        expect(await edit.handler({ rawInput: 'status' })).toMatchObject({ text: 'edit approval is on' })
+        expect(await edit.handler({ rawInput: 'off' })).toMatchObject({ kind: 'success' })
+        expect(h.settings.get().enabled).toBe(false)
+        expect(await edit.handler({ rawInput: 'status' })).toMatchObject({ text: 'edit approval is off' })
+      } finally {
+        await h.dispose()
+      }
+    })
 
-  it('passes on str_replace_editor view commands', async () => {
-    const h = await mount()
-    try {
-      const decision = await preExecute(h, 'str_replace_editor', { command: 'view', path: '/x' })
-      expect(decision).toEqual({ kind: 'allow' })
-    } finally {
-      await h.dispose()
-    }
-  })
-
-  it('registers the /approval-edit command', async () => {
-    const h = await mount()
-    try {
-      const names = h.commands.map(command => command.name).sort()
-      expect(names).toEqual(['approval-edit'])
-
-      const edit = h.commands.find(command => command.name === 'approval-edit')!
-      expect(await edit.handler({ rawInput: 'status' })).toMatchObject({ text: 'edit approval is on' })
-      expect(await edit.handler({ rawInput: 'off' })).toMatchObject({ kind: 'success' })
-      expect(h.settings.get().enabled).toBe(false)
-      expect(await edit.handler({ rawInput: 'status' })).toMatchObject({ text: 'edit approval is off' })
-    } finally {
-      await h.dispose()
-    }
-  })
-
-  it('does not break when the preview read fails', async () => {
-    const h = await mount()
-    try {
-      h.files.set('broken', 'x')
-      // Force readText to throw for this path.
-      const original = h.ctx.get('fs') as { readText: (t: { displayPath: string }) => Promise<string> }
-      original.readText = async () => { throw new Error('boom') }
-      const decision = await preExecute(h, 'write', { file_path: 'broken', content: 'y' })
-      expect(decision).toEqual({ kind: 'allow' })
-    } finally {
-      await h.dispose()
-    }
+    it('registers the /approval-bash command', async () => {
+      const h = await mount()
+      try {
+        const bash = h.commands.find(command => command.name === 'approval-bash')!
+        expect(await bash.handler({ rawInput: 'status' })).toMatchObject({ text: 'bash approval is off' })
+        expect(await bash.handler({ rawInput: 'on' })).toMatchObject({ kind: 'success' })
+        expect(h.bashSettings.get().enabled).toBe(true)
+        expect(await bash.handler({ rawInput: 'status' })).toMatchObject({ text: 'bash approval is on' })
+      } finally {
+        await h.dispose()
+      }
+    })
   })
 })
