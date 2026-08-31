@@ -121,7 +121,8 @@ dsh plugin --profile web add dsh-edit-approval
 
 - Node.js `^22.19.0 || >=24.0.0`。
 - DeepSeek Harness web 配置档（`dsh --profile web`）；`@deepseek-ai/*` peer 包由 harness 运行时提供。
-- 注册工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。
+- 同时兼容 **DSH rc.2（`0.1.1-rc.2`）与 `0.1.2-alpha.2`**（含 alpha.1）。peer 范围按「版本元组并集」声明（`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-alpha.2`）——npm 预发布匹配要求候选与比较器处于同一 [major, minor, patch] 元组，因此每新增一个元组系列就要追加一个 `||` 项；同一元组内的 rc 滚动（`rc.2 → rc.3`）无需更新。
+- 客户端按**能力存在**探测版本（`ctx.get('uiConversation')` 是否解析、会话快照是否仍携带 `chat`/`pending`），绝不解析版本字符串。会话/聊天读取走**双通道适配器**：rc.2 读会话面快照的 `chat`/`pending`，alpha.1+ 读 `uiConversation` 服务的命名 "chat" 视图；两代都缺则退化为 `undefined`（不崩）。注册工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。
 
 > [!WARNING]
 > 本项目与 DSH 均处于 developer preview。可复现环境请固定精确版本，并留意上文的行为说明。

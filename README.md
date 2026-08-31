@@ -121,6 +121,8 @@ The config surface is **forward-compatible by contract**: new keys are only ever
 
 - Node.js `^22.19.0 || >=24.0.0`.
 - DeepSeek Harness web profile (`dsh --profile web`); peer `@deepseek-ai/*` packages are resolved by the harness at runtime.
+- Compatible with **DSH rc.2 (`0.1.1-rc.2`) and `0.1.2-alpha.2`** (incl. alpha.1). Peer ranges are declared as a union of *version tuples* (`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-alpha.2`) — npm's prerelease matching requires a candidate to share the comparator's `[major, minor, patch]` tuple, so each new tuple series appends another `||` term; same-tuple rc rolls (`rc.2 → rc.3`) need no update.
+- The client detects the version by **capability presence** (`ctx.get('uiConversation')` resolves, the session snapshot still carries `chat`/`pending`), never by parsing a version string. Session/chat reads use a **dual-channel adapter**: rc.2 reads `chat`/`pending` from the session-face snapshot, alpha.1+ reads the named "chat" view of the `uiConversation` service; both missing degrades to `undefined` (no crash).
 - The registered tool name is `str_replace_editor` (underscores), distinct from the npm package name `@deepseek-ai/dsh-tool-str-replace-editor`.
 
 > [!WARNING]

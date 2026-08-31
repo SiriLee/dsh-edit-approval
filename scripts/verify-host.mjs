@@ -8,6 +8,9 @@
  * Run: `npm run build && node scripts/verify-host.mjs` (also wired into CI).
  */
 
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import * as plugin from '../lib/index.js'
 
@@ -16,6 +19,21 @@ const check = (name, ok, detail) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`)
   if (!ok) failures += 1
 }
+
+// ---- 0. version-neutral settings-namespace import (dsh-rewind pattern) ----
+// DSH 0.1.2-alpha.2 removed the `settingsNamespace` named export, so a static
+// `import { settingsNamespace } from '@deepseek-ai/dsh-settings'` would fail to
+// link on alpha.2. The host half must use a namespace import + optional call.
+// This guard fails the build if that version-neutral choice is reverted —
+// otherwise the plugin would only ever link on one harness generation.
+const HOST = resolve(dirname(fileURLToPath(import.meta.url)), '../lib/index.js')
+const hostSource = readFileSync(HOST, 'utf8')
+check(
+  'host bundle imports dsh-settings by namespace, never statically',
+  !/import\s*\{[^}]*settingsNamespace[^}]*\}\s*from\s*["']@deepseek-ai\/dsh-settings["']/.test(hostSource)
+    && /import\s*\*\s*as\s+\w+\s+from\s*["']@deepseek-ai\/dsh-settings["']/.test(hostSource),
+  'lib/index.js must read `settingsNamespace` through a namespace import (version-neutral), not a static named import',
+)
 
 // ---- 1. module shape ----
 check(

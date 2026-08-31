@@ -31,6 +31,7 @@ import { ApprovalToggleRow } from './settings-row.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
 import { isDiffReason, renderDiffRows } from './diff-rows.ts'
 import { FocusRestore } from './refocus.ts'
+import { CHAT_VIEW, chatSnapshotOf, uiConversationOf, type ChatSnapshotLike } from './conversation.ts'
 import { BASH_NS, bashEn, bashZh, en, NS, zh, type BashApprovalKey, type EditApprovalKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -105,16 +106,31 @@ const HEADLINE_SELECTOR = '[data-approval-scroll] > div:first-child'
 /** Panels already enhanced in this page lifetime. */
 const enhanced = new WeakSet<Element>()
 
-/** Whether a pending approval exists behind one panel key (the diff renders only for approvals). */
+/**
+ * Whether a pending approval exists behind one panel key (the diff renders
+ * only for approvals). Dual channel: on rc.2 the session-face snapshot still
+ * carries `pending` (`PendingWait[]`) and the panel key matches a pending
+ * item; on alpha.1+ the face no longer exposes `pending` (the split moved it
+ * to the ui-conversation surface) and the `[data-approval-key]` panel in the
+ * DOM IS the pending-approval presentation, so a present panel is accepted.
+ */
 function hasPendingApproval(ctx: ClientContext, key: string): boolean {
-  const ids = ctx.sessions.list.getSnapshot().ids
-  for (const id of ids) {
+  let sawPendingSurface = false
+  for (const id of ctx.sessions.list.getSnapshot().ids) {
     const binding = ctx.sessions.binding(id)
     if (binding === undefined) continue
-    const pending = binding.session.getSnapshot().pending
-    if (pending.some((item) => item.kind === 'approval' && item.key === key)) return true
+    const pending = (binding.session.getSnapshot() as { pending?: readonly unknown[] }).pending
+    if (pending === undefined) continue
+    sawPendingSurface = true
+    if (pending.some((item) => {
+      const p = item as { kind?: string; key?: string }
+      return p.kind === 'approval' && p.key === key
+    })) return true
   }
-  return false
+  // rc.2: a pending surface exists but the approval is not visible yet — keep
+  // waiting for a later mutation. alpha.1+: no session exposes `pending`, so
+  // the panel is the pending presentation — accept it (never a false wait).
+  return sawPendingSurface ? false : true
 }
 
 /** Rebuild the diff headline of one freshly rendered approval panel. */
@@ -157,19 +173,23 @@ function scan(ctx: ClientContext, t: (key: EditApprovalKey) => string): void {
 
 /**
  * Read the latest `<commandName>` command outcome ("... is on/off") at or
- * after `fromIndex` in the chat order from the session snapshot, or null when
- * none has settled yet. The index baseline lets a caller wait for a FRESH
- * outcome instead of the stale one from a command it just issued.
+ * after `fromIndex` in the chat order from the given (dual-channel) chat
+ * snapshot, or null when none has settled yet. The index baseline lets a
+ * caller wait for a FRESH outcome instead of the stale one from a command it
+ * just issued. `undefined` chat (neither channel available) reads as no
+ * outcome — the caller keeps waiting — never a crash.
  */
-function approvalStatus(session: SessionFace, fromIndex = 0, commandName = 'approval-edit'): boolean | null {
+function approvalStatus(chat: ChatSnapshotLike | undefined, fromIndex = 0, commandName = 'approval-edit'): boolean | null {
+  if (chat === undefined) return null
   let last: string | undefined
-  const snapshot = session.getSnapshot()
-  for (let index = fromIndex; index < snapshot.chat.order.length; index += 1) {
-    const key = snapshot.chat.order[index]!
-    const node = snapshot.chat.nodes.get(key)
+  for (let index = fromIndex; index < chat.order.length; index += 1) {
+    const key = chat.order[index]!
+    const node = chat.nodes.get(key) as
+      | { kind?: string; data?: { name?: string; outcome?: { kind?: string; text?: string } } }
+      | undefined
     if (node?.kind !== 'command') continue
-    const command = node.data as { name?: string; outcome?: { kind?: string; text?: string } }
-    if (command.name === commandName && command.outcome?.text !== undefined) {
+    const command = node.data
+    if (command?.name === commandName && command.outcome?.text !== undefined) {
       last = command.outcome.text
     }
   }
@@ -187,12 +207,15 @@ function currentSessionOf(ctx: ClientContext): SessionFace | undefined {
 
 /**
  * Wait until a `<commandName>` command outcome at/after `base` (the chat order
- * length captured BEFORE dispatching the command) settles in the session
- * snapshot. Settling on the command's own baselined outcome guarantees we
- * read what that command committed — never a stale earlier outcome. Resolves
- * `null` on timeout.
+ * length captured BEFORE dispatching the command) settles in the session chat.
+ * The chat is re-read through `chatOf` (the dual-channel reader) on every
+ * check, so the baselined outcome comes from the live chat regardless of the
+ * harness generation. Settling on the command's own baselined outcome
+ * guarantees we read what that command committed — never a stale earlier
+ * outcome. Resolves `null` on timeout.
  */
 async function waitForApprovalOutcome(
+  chatOf: (session: SessionFace | undefined) => ChatSnapshotLike | undefined,
   session: SessionFace,
   base: number,
   commandName: string,
@@ -209,7 +232,7 @@ async function waitForApprovalOutcome(
       resolve(value)
     }
     const check = (): void => {
-      const value = approvalStatus(session, base, commandName)
+      const value = approvalStatus(chatOf(session), base, commandName)
       if (value !== null) settle(value)
     }
     const unsubscribe = session.subscribe(check)
@@ -227,6 +250,19 @@ function readEnabled(scope: SettingsScope<ApprovalClientSettings>): boolean | nu
 /** The Settings → General row face bound to one feature's host command. */
 function toggleRow(ctx: ClientContext, commandName: string, namespace: string) {
   const settingsScope = ctx.settingsScope.bind<ApprovalClientSettings>({ namespace })
+  // Dual-channel chat reader: the rc.2 session-face snapshot first, then the
+  // alpha.1+ uiConversation "chat" view. Re-read on every call (services
+  // restart under the live-reload profile patcher) and degrades to undefined —
+  // it never throws, so an unknown/teardown session cannot break the toggle.
+  const chatOf = (session: SessionFace | undefined): ChatSnapshotLike | undefined => {
+    if (session === undefined) return undefined
+    try {
+      const view = uiConversationOf(ctx)?.binding(session.sessionId).target(CHAT_VIEW)
+      return chatSnapshotOf(session, view)
+    } catch {
+      return undefined
+    }
+  }
   return {
     getStatus: async (): Promise<boolean | null> => {
       const immediate = readEnabled(settingsScope)
@@ -254,9 +290,9 @@ function toggleRow(ctx: ClientContext, commandName: string, namespace: string) {
     toggle: async (next: boolean): Promise<boolean | null> => {
       const session = currentSessionOf(ctx)
       if (session === undefined) return null
-      const base = session.getSnapshot().chat.order.length
+      const base = chatOf(session)?.order.length ?? 0
       await session.command(`/${commandName} ${next ? 'on' : 'off'}`)
-      return await waitForApprovalOutcome(session, base, commandName)
+      return await waitForApprovalOutcome(chatOf, session, base, commandName)
     },
   }
 }

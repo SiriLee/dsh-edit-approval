@@ -38,7 +38,8 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-settings'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import * as dshSettings from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { decideApproval, targetPathOf, DEFAULT_TOOLS } from './guard.ts'
 import { decideCommandApproval, type BashApprovalSettings } from './bash-guard.ts'
 
@@ -103,9 +104,21 @@ const BashSchema = z.object({
   allow: z.array(String).default([...BASH_ALLOW_DEFAULT]),
 })
 
+/**
+ * Version-neutral settings-namespace brand: on rc.2 `settingsNamespace(ns)`
+ * brands the string (the brand is a compile-time marker erased at runtime, so
+ * the helper returns `ns`), while 0.1.2-alpha.2 removed the helper and
+ * `settings.register` accepts the raw namespace string. Reading it through
+ * optional chaining means a single compiled host bundle links and runs on both
+ * generations — a static `import { settingsNamespace }` would fail to link on
+ * alpha.2 (see dsh-rewind's settings-locale adapter).
+ */
+const namespaceOf = (name: string): SettingsNamespace =>
+  (dshSettings.settingsNamespace?.(name) ?? name) as SettingsNamespace
+
 /** Durable settings namespaces backing every runtime toggle. */
-const SETTINGS_NAMESPACE = settingsNamespace('edit-approval')
-const BASH_NAMESPACE = settingsNamespace('bash-approval')
+const SETTINGS_NAMESPACE = namespaceOf('edit-approval')
+const BASH_NAMESPACE = namespaceOf('bash-approval')
 
 /** Parent-traversal probe shared with the fs tools' session-cwd resolution. */
 const PARENT_PATH_SEGMENT = /(?:^|[\\/])\.\.(?:[\\/]|$)/
