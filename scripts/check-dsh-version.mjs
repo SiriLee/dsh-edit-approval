@@ -97,6 +97,11 @@ function lowest(versions) {
   return versions.reduce((winner, value) => (compareVersions(value, winner) < 0 ? value : winner))
 }
 
+/** The highest version in a list. */
+function highest(versions) {
+  return versions.reduce((winner, value) => (compareVersions(value, winner) > 0 ? value : winner))
+}
+
 function reportDrift(problems) {
   console.error('check-dsh-version: declaration drifted — fix package.json before releasing:')
   for (const problem of problems) console.error(`  - ${problem}`)
@@ -120,7 +125,10 @@ for (const name of peers) {
     const term = clause.trim()
     const match = PEER_TERM.exec(term)
     if (match === null) {
-      drift.push(`${name}: cannot verify range term "${term}" (expected ^X.Y.Z[-pre])`)
+      drift.push(
+        `${name}: cannot verify range term "${term}" (expected ^X.Y.Z[-pre] — teach this ` +
+          'script any deliberately new shape, such as a stable ^X.Y.x range, before shipping it)',
+      )
       break
     }
     terms.push({ version: match[1], tuple: tupleOf(match[1]) })
@@ -197,8 +205,13 @@ for (const version of ordered) {
   else covered.push(version)
 }
 const newest = ordered[ordered.length - 1]
-/** Highest declared version: the ceiling above which a release needs a new term. */
-const ceiling = covered[covered.length - 1] ?? lowest([...floors.values()])
+/**
+ * Highest declared version: the ceiling above which a release needs a new term.
+ * Every declared term accepts same-tuple rolls above its floor, so the top of
+ * the window is the newest covered release — or, with an empty window, the
+ * highest declared floor.
+ */
+const ceiling = covered[covered.length - 1] ?? highest([...floors.values()])
 
 console.log(`DSH latest:      ${latest}`)
 console.log(`declared tuples: ${referenceTuples}`)
@@ -220,14 +233,22 @@ if (gaps.length > 0) {
   )
 }
 
+if (covered.length === 0) {
+  console.log(
+    'ACTION NEEDED: no published DSH release falls inside the declared window — the floors ' +
+      'look ahead of the registry. Fix package.json instead of trusting the declaration.',
+  )
+  process.exit(1)
+}
+
 if (compareVersions(newest, ceiling) <= 0) {
   console.log('OK: every published DSH release is inside the declared window.')
   process.exit(0)
 }
 
 console.log(`ACTION NEEDED: DSH published ${newest}, above the declared ceiling (${ceiling}).`)
-console.log(`  1. Append "|| ^${tupleOf(newest)}-rc.<n>" (the verified floor) to every`)
-console.log('     @deepseek-ai/dsh-* peer range in package.json, keeping tuple order identical.')
+console.log(`  1. Append "|| ^${newest}" (the verified floor) to every @deepseek-ai/dsh-* peer`)
+console.log('     range in package.json, keeping the tuple order identical across peers.')
 console.log(`  2. Leave dsh.engines.dsh at the oldest floor (>=${oldestFloor}) unless the old lines are dropped.`)
 console.log(`  3. Bump the @deepseek-ai/dsh-* devDependencies to ^${latest}, npm install, rerun`)
 console.log('     typecheck / tests / scripts/verify-host.mjs, then release.')
