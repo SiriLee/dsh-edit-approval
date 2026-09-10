@@ -121,7 +121,7 @@ dsh plugin --profile web add dsh-edit-approval
 
 - Node.js `^22.19.0 || >=24.0.0`。
 - DeepSeek Harness web 配置档（`dsh --profile web`）；`@deepseek-ai/*` peer 包由 harness 运行时提供。
-- 同时兼容 **DSH rc.2（`0.1.1-rc.2`）与 `0.1.2-alpha.2`**（含 alpha.1）。peer 范围按「版本元组并集」声明（`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-alpha.2`）——npm 预发布匹配要求候选与比较器处于同一 [major, minor, patch] 元组，因此每新增一个元组系列就要追加一个 `||` 项；同一元组内的 rc 滚动（`rc.2 → rc.3`）无需更新。
+- 声明对准**已实测的 DSH 范围**：每个已发布版本元组一个 `||` 项——`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1`（`@deepseek-ai/dsh-settings` 保留自身的 `^0.1.0-rc.8` 地板），并由 `dsh.engines.dsh` 声明运行时下限 `>=0.1.0-rc.6`。npm 预发布匹配要求候选与比较器处于同一 [major, minor, patch] 元组，且没有任何简写能表达「`0.1.x` 全系列预发布」，因此每新增一个元组系列就要追加一个 `||` 项；同一元组内的 rc 滚动（`rc.2 → rc.3`）无需更新。`node scripts/check-dsh-version.mjs` 守护这份声明（各 peer 元组序列一致、engines 下限同步、没有发布超出上限）。`0.1.2` 的 alpha 线以及未经实测的 `0.1.3-alpha.2` 不在声明窗口内：客户端仍按能力存在探测而非解析版本号，alpha 线的兼容分支保留，但不再作为声明目标。
 - 客户端按**能力存在**探测版本（`ctx.get('uiConversation')` 是否解析、会话快照是否仍携带 `chat`/`pending`），绝不解析版本字符串。会话/聊天读取走**双通道适配器**：rc.2 读会话面快照的 `chat`/`pending`，alpha.1+ 读 `uiConversation` 服务的命名 "chat" 视图；两代都缺则退化为 `undefined`（不崩）。注册工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。
 
 > [!WARNING]
