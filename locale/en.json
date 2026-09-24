@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Edit approval",
+    "description": "Ask before file edits and commands, with a line diff."
+  }
+}

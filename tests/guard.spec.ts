@@ -5,9 +5,9 @@ import {
   proposeContent,
   countOccurrences,
   formatReason,
-  DEFAULT_TOOLS,
   type EditApprovalSettings,
 } from '../src/guard.ts'
+import { DEFAULT_TOOLS } from '../src/config.ts'
 
 function settings(overrides: Partial<EditApprovalSettings> = {}): EditApprovalSettings {
   return {

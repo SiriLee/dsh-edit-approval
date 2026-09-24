@@ -1,7 +1,7 @@
 {
   "name": "dsh-edit-approval",
   "version": "0.3.2",
-  "description": "DeepSeek Harness plugin: per-edit approval with a red/green line diff before write/edit/str_replace_editor — approve once or reject (Claude Code behavior).",
+  "description": "Edit and command approval with a line diff · 文件修改与命令执行审批，附行级 diff",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -15,6 +15,7 @@
     "type": "git",
     "url": "git+https://github.com/SiriLee/dsh-edit-approval.git"
   },
+  "homepage": "https://github.com/SiriLee/dsh-edit-approval#readme",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -27,6 +28,7 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
@@ -37,7 +39,8 @@
     "cordis.patch.yml",
     "LICENSE",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "locale/*.json"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -47,38 +50,40 @@
       "patch": "./cordis.patch.yml"
     },
     "engines": {
-      "dsh": ">=0.1.0-rc.6"
+      "dsh": ">=0.1.7-rc.1"
     },
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
   },
   "scripts": {
-    "build": "npm run build:host && npm run build:client",
-    "build:host": "tsc -p tsconfig.json",
-    "build:client": "tsc -p tsconfig.client.json && node scripts/build-client.mjs",
-    "build:portable": "node scripts/build-portable.mjs",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
     "check:dsh": "node scripts/check-dsh-version.mjs",
     "test": "vitest run",
     "verify:host": "node scripts/verify-host.mjs",
+    "check": "npm run typecheck && npm test && npm run build && node scripts/verify-host.mjs && npm pack --dry-run",
     "prepare": "npm run build"
   },
-  "dependencies": {
-    "diff": "^9.0.0"
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-commands": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-fs": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-sandbox": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-settings": "^0.1.0-rc.8 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-locale": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-fs": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.1.7-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependenciesMeta": {
@@ -88,55 +93,56 @@
     "@deepseek-ai/schemastery": {
       "optional": true
     },
-    "@deepseek-ai/dsh-tools": {
+    "@deepseek-ai/dsh-client-locale": {
       "optional": true
     },
-    "@deepseek-ai/dsh-fs": {
+    "@deepseek-ai/dsh-client-ui-plugin-manager": {
       "optional": true
     },
-    "@deepseek-ai/dsh-sandbox": {
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
       "optional": true
     },
     "@deepseek-ai/dsh-commands": {
       "optional": true
     },
+    "@deepseek-ai/dsh-fs": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-settings": {
       "optional": true
     },
-    "@deepseek-ai/dsh-client-runtime": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-ui-slots": {
+    "@deepseek-ai/dsh-tools": {
       "optional": true
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-commands": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-fs": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-sandbox": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-settings": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.1",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-store": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-commands": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-fs": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.7-rc.1",
+    "@deepseek-ai/schemastery": "3.18.4",
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
+    "diff": "^9.0.0",
     "esbuild": "^0.28.2",
     "jsdom": "^26.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
-  },
-  "overrides": {
-    "@deepseek-ai/dsh-api-remotes": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-agent-presets": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-cordis-host-runner": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.1-rc.2"
   }
 }

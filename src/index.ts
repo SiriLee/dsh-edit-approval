@@ -3,133 +3,111 @@
  *
  * Two mirror-image approval features on the `tools/pre-execute` waterfall:
  *
- * 1. **edit approval** (`edit-approval` namespace, `/approval-edit` command) —
- *    intercepts `write` / `edit` / `str_replace_editor`, reads the target
- *    file's current content, computes a line-level diff against the proposed
- *    content, and returns `{ kind: 'ask', reason }` when a human decision is
- *    needed (see `./guard.ts`).
- * 2. **bash approval** (`bash-approval` namespace, `/approval-bash` command) —
- *    intercepts `bash` (whitelisted by `tools`), asks for every command that
- *    is neither allow-listed nor a sandbox escalation (see
+ * 1. **edit approval** (`editEnabled`) — intercepts `write` / `edit` (and
+ *    `str_replace_editor` when a deployment opts that tool in), reads the
+ *    target file's current content, computes a line-level diff against the
+ *    proposed content, and returns `{ kind: 'ask', reason }` when a human
+ *    decision is needed (see `./guard.ts`).
+ * 2. **bash approval** (`bashEnabled`) — intercepts command tools, asking for
+ *    every command that is neither allow-listed nor a sandbox escalation (see
  *    `./bash-guard.ts`). fs-free by design.
  *
  * The harness's own `serviceAsk` routes every `ask` through `ctx.approval` —
  * the session policy (`ask`/`never`) keeps applying, and an `allowed-once`
- * proceeds while `rejected` denies the call. Every non-blocking case
- * delegates via `next()` so later policy listeners still run.
+ * proceeds while `rejected` denies the call. Every non-blocking case delegates
+ * via `next()` so later policy listeners still run.
  *
- * Naming convention: feature/namespace = `<tool>-approval`, user command =
- * `/approval-<tool>`. New tool families add a NEW namespace + command; existing
- * namespaces are never modified (compatibility contract: settings fields may
- * only be added with defaults, never removed or reinterpreted).
- *
- * Runtime state lives in the persisted `edit-approval` and `bash-approval`
- * settings namespaces (schema defaults < cordis row config < user settings
- * page); the `/approval-edit` and `/approval-bash` commands manage them.
+ * **Settings (DSH 0.1.7).** The settings-namespace registry this plugin used to
+ * register (`edit-approval` / `bash-approval`) is gone. Both features now read
+ * ONE profile entry's `Config` — the bundle patch's row id, which equals the
+ * package name — and the two master switches are the only `.volatile()` fields,
+ * so they are the only ones the config page shows and the only ones a write may
+ * address. Everything else stays ordinary config, edited in the profile file
+ * exactly as before. `./config.ts` owns the adapter; the guards stay pure.
  *
  * @module dsh-edit-approval
  */
 
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { canonicalPath } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-settings'
-import * as dshSettings from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { decideApproval, targetPathOf, DEFAULT_TOOLS } from './guard.ts'
-import { decideCommandApproval, type BashApprovalSettings } from './bash-guard.ts'
+import { decideApproval, targetPathOf } from './guard.ts'
+import { decideCommandApproval } from './bash-guard.ts'
+import {
+  DEFAULT_BASH_ALLOW,
+  DEFAULT_BASH_APPROVAL,
+  DEFAULT_BASH_TOOLS,
+  DEFAULT_EDIT_APPROVAL,
+  DEFAULT_TOOLS,
+  volatileApprovalStore,
+  type ApprovalConfig,
+  type ApprovalConfigStore,
+} from './config.ts'
+
+export { DEFAULT_BASH_ALLOW, DEFAULT_BASH_TOOLS, DEFAULT_TOOLS } from './config.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'dsh-edit-approval'
 
-/** Default whitelist for the bash-approval feature. */
-export const DEFAULT_BASH_TOOLS: readonly string[] = ['bash']
+/**
+ * Required services: the human command registry and the settings service the
+ * config page and the two toggle commands write through. `tools` and `fs` are
+ * awaited separately (see `apply`) so the commands and the config page still
+ * work in a deployment without the file tools.
+ */
+export const inject = ['commands', 'settings']
 
-/** Shared bash-approval defaults — the single source both schemas reference. */
-const BASH_ENABLED_DEFAULT = false
-const BASH_ALLOW_DEFAULT: readonly string[] = []
+/**
+ * Deployment configuration: the plugin entry's document.
+ *
+ * The two `*Enabled` switches are `.volatile()`; every other field is ordinary
+ * config. See `./config.ts` for why that split is where it is.
+ */
+export interface Config extends ApprovalConfig {}
 
-/** Deployment defaults supplied by the cordis row (profile patch can override). */
-export interface Config {
-  /** Master switch; off means edits execute without asking. */
-  enabled: boolean
-  /** Whitelist of intercepted tool names. */
-  tools: string[]
-  /** Ask only when the change touches at least this many lines. */
-  minDiffLines: number
-  /** Whether creating a new file asks for approval. */
-  includeCreate: boolean
-  /** Whether clearing/emptying a file asks for approval. */
-  includeDelete: boolean
-  /**
-   * Bash-approval row-config overlay (optional; every key optional). The
-   * `bash-approval` settings namespace resolves schema defaults < this base <
-   * user settings page, exactly like the edit half.
-   */
-  bash?: {
-    enabled?: boolean
-    tools?: string[]
-    allow?: string[]
-  }
-}
-
-export const Config: z<Config> = z.object({
-  enabled: z.boolean().default(true),
-  tools: z.array(String).default([...DEFAULT_TOOLS]),
-  minDiffLines: z.number().default(0),
-  includeCreate: z.boolean().default(true),
-  includeDelete: z.boolean().default(true),
-  // Optional at the Config level (no default): an absent `bash` key stays
-  // absent after validation, so the bash-approval namespace falls back to its
-  // own schema defaults; a present key overrides only the fields it names.
-  bash: z.object({
-    enabled: z.boolean().default(BASH_ENABLED_DEFAULT),
-    tools: z.array(String).default([...DEFAULT_BASH_TOOLS]),
-    allow: z.array(String).default([...BASH_ALLOW_DEFAULT]),
-  }),
+/**
+ * The `Config` schema the host resolves and projects as this entry's form.
+ *
+ * Deliberately NOT annotated `z<Config>`: a `.volatile()` field makes the
+ * schema's INPUT side non-total, which that annotation's variance rejects (the
+ * sister project omits it for the same reason). The pairing is pinned instead
+ * by `tests/config.spec.ts`, which reads the schema's own serialized envelope
+ * (`Config.toJSON()` — the same projection the settings wire uses) and asserts
+ * its volatile field set equals the config page's field list.
+ */
+export const Config = z.object({
+  editEnabled: z.boolean().default(DEFAULT_EDIT_APPROVAL.enabled).volatile(),
+  bashEnabled: z.boolean().default(DEFAULT_BASH_APPROVAL.enabled).volatile(),
+  // Ordinary fields: excluded from the config page and editable only in the
+  // profile file, exactly as they were before the settings model changed.
+  editTools: z.array(String).default([...DEFAULT_TOOLS]),
+  editMinDiffLines: z.number().step(1).min(0).default(DEFAULT_EDIT_APPROVAL.minDiffLines),
+  editIncludeCreate: z.boolean().default(DEFAULT_EDIT_APPROVAL.includeCreate),
+  editIncludeDelete: z.boolean().default(DEFAULT_EDIT_APPROVAL.includeDelete),
+  bashTools: z.array(String).default([...DEFAULT_BASH_TOOLS]),
+  bashAllow: z.array(String).default([...DEFAULT_BASH_ALLOW]),
 })
 
 /**
- * The bash-approval settings namespace schema. Defaults MUST stay in lockstep
- * with the `bash` shape above (schema defaults < row config < user layer), so
- * the two can never drift apart.
+ * The profile entry id this plugin's configuration is addressed by: the bare
+ * row id the bundle patch declares, which the config editor keys on
+ * (`entry.options.id`). The fiber's own `entry.id` carries the loader's
+ * ancestor prefix (`include:dsh-edit-approval`), so reading the local option is
+ * both simpler and exactly the key the write path looks up.
+ *
+ * Read from the plugin's OWN fiber, never from an `ctx.inject` child: a child
+ * fiber has no loader entry.
+ *
+ * @param ctx - the plugin context.
+ * @returns the entry id, or undefined for an entry-less mount.
  */
-const BashSchema = z.object({
-  enabled: z.boolean().default(BASH_ENABLED_DEFAULT),
-  tools: z.array(String).default([...DEFAULT_BASH_TOOLS]),
-  allow: z.array(String).default([...BASH_ALLOW_DEFAULT]),
-})
-
-/**
- * Version-neutral settings-namespace brand: on rc.2 `settingsNamespace(ns)`
- * brands the string (the brand is a compile-time marker erased at runtime, so
- * the helper returns `ns`), while 0.1.2-alpha.2 removed the helper and
- * `settings.register` accepts the raw namespace string. Reading it through
- * optional chaining means a single compiled host bundle links and runs on both
- * generations — a static `import { settingsNamespace }` would fail to link on
- * alpha.2 (see dsh-rewind's settings-locale adapter).
- */
-const namespaceOf = (name: string): SettingsNamespace =>
-  (dshSettings.settingsNamespace?.(name) ?? name) as SettingsNamespace
-
-/** Durable settings namespaces backing every runtime toggle. */
-const SETTINGS_NAMESPACE = namespaceOf('edit-approval')
-const BASH_NAMESPACE = namespaceOf('bash-approval')
-
-/** Parent-traversal probe shared with the fs tools' session-cwd resolution. */
-const PARENT_PATH_SEGMENT = /(?:^|[\\/])\.\.(?:[\\/]|$)/
-
-/** Session workspace cwd for this call (same rule as `dsh-tool-fs`). */
-function sessionCwd(exec: ToolExecution, requestedPath: string): string | undefined {
-  const cwd = exec.agent?.session.header.cwd
-  if (cwd === undefined || (!PARENT_PATH_SEGMENT.test(cwd) && !PARENT_PATH_SEGMENT.test(requestedPath))) {
-    return cwd
-  }
-  return canonicalPath(cwd)
+export function approvalConfigKey(ctx: Context): string | undefined {
+  const fiber = (ctx as { fiber?: { entry?: { options?: { id?: string } } } }).fiber
+  return fiber?.entry?.options?.id
 }
 
 /** Narrow the tool's lossless JSON arguments to a plain record. */
@@ -140,16 +118,25 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * The session's effective approval policy for one call: its own override,
- * else the service config default. Mirrored by both approval features — under
- * `never` (Full access / danger-full-access preset) the plugin stops asking
- * entirely and delegates, because every `ask` it would emit would be
- * auto-rejected by the approval service, silently breaking the tools.
+ * The session workspace cwd for this call, verbatim.
+ *
+ * The fs tools resolve a relative path against `header.cwd` exactly as it is
+ * spelled; DSH 0.1.7 stopped canonicalizing a parent-traversing cwd, so any
+ * canonicalization here would preview a different file identity than the tool
+ * mutates.
  */
-function resolvePolicy(
-  exec: ToolExecution,
-  approval: unknown,
-): 'ask' | 'never' {
+function sessionCwd(exec: ToolExecution): string | undefined {
+  return exec.agent?.session.header.cwd
+}
+
+/**
+ * The session's effective approval policy for one call: its own override, else
+ * the service config default. Under `never` (Full access / danger-full-access
+ * preset) the plugin stops asking entirely and delegates, because every `ask`
+ * it would emit would be auto-rejected by the approval service, silently
+ * breaking the tools.
+ */
+function resolvePolicy(exec: ToolExecution, approval: unknown): 'ask' | 'never' {
   if (exec.agent === undefined) return 'ask'
   const service = approval as
     | { overrideOf?(session: unknown): string | undefined; config?: { policy?: string } }
@@ -158,80 +145,126 @@ function resolvePolicy(
   return policy === 'never' ? 'never' : 'ask'
 }
 
-/** The approval service face the policy check reads. */
+/** The approval service face the policy check reads (resolved lazily). */
 function approvalService(scope: Context): unknown {
   return scope.get('approval')
 }
 
+/** Render one feature's master switch for a `status` command answer. */
+function switchState(on: boolean): string {
+  return on ? 'on' : 'off'
+}
+
 /**
- * Mount the host plugin: settings namespaces, the four-feature commands, and
+ * Register one `<feature> on | off | status` command over a master switch.
+ *
+ * The write goes through the store, so it addresses the SAME document field the
+ * config page edits — the command and the switch cannot disagree.
+ *
+ * @param ctx - the plugin context.
+ * @param store - the settings store, or undefined when the entry is unavailable.
+ * @param options - the command's identity and the switch it drives.
+ */
+function registerToggleCommand(
+  ctx: Context,
+  store: ApprovalConfigStore | undefined,
+  options: {
+    readonly command: string
+    readonly label: string
+    readonly field: 'editEnabled' | 'bashEnabled'
+    readonly read: () => boolean
+  },
+): void {
+  ctx.commands.register({
+    name: options.command,
+    description: `Turn ${options.label} on or off`,
+    input: { hint: 'on | off | status' },
+    handler: async (invocation) => {
+      const mode = invocation.rawInput.trim()
+      if (store === undefined) {
+        return { kind: 'error', text: `${options.label} settings are unavailable` }
+      }
+      if (mode === 'status') {
+        return { kind: 'success', text: `${options.label} is ${switchState(options.read())}` }
+      }
+      if (mode === 'on' || mode === 'off') {
+        try {
+          await store.saveSwitch(options.field, mode === 'on')
+        } catch (error) {
+          ctx.logger.warn(`dsh-edit-approval: ${options.command} could not write: ${String(error)}`)
+          return { kind: 'error', text: `${options.label} could not be turned ${mode}` }
+        }
+        return { kind: 'success', text: `${options.label} turned ${mode}` }
+      }
+      return { kind: 'error', text: `usage: /${options.command} on | off | status` }
+    },
+  })
+}
+
+/**
+ * Mount the host plugin: the config page policy, the two toggle commands, and
  * the `tools/pre-execute` interception dispatching to the edit or the bash
  * guard by tool name (edit wins on an overlap; defaults never overlap).
+ *
  * @param ctx - plugin context.
- * @param config - deployment defaults from the cordis row.
+ * @param config - the resolved entry configuration (live volatile references).
  */
-export function apply(ctx: Context, config: Config): void {
-  ctx.inject(['settings', 'commands', 'fs'], (scope) => {
-    const settings = scope.settings.register(SETTINGS_NAMESPACE, Config, { base: config })
-    const bashSettings = scope.settings.register(BASH_NAMESPACE, BashSchema, { base: config.bash ?? {} })
-
-    // --- `/approval-edit on | off | status` ---
-    scope.commands.register({
-      name: 'approval-edit',
-      description: 'Turn edit approval on or off',
-      input: { hint: 'on | off | status' },
-      handler: async (invocation) => {
-        const mode = invocation.rawInput.trim()
-        if (mode === 'status') {
-          return { kind: 'success', text: `edit approval is ${settings.get().enabled ? 'on' : 'off'}` }
-        }
-        if (mode === 'on' || mode === 'off') {
-          await settings.update({ enabled: mode === 'on' })
-          return { kind: 'success', text: `edit approval turned ${mode}` }
-        }
-        return { kind: 'error', text: 'usage: /approval-edit on | off | status' }
-      },
+export function apply(ctx: Context, config?: Config): void {
+  const entryId = approvalConfigKey(ctx)
+  const store = config === undefined || entryId === undefined
+    ? undefined
+    : volatileApprovalStore(config, {
+      entryId,
+      update: (id, patch) => ctx.settings.update(id, patch),
+      clear: (id, fields) => ctx.settings.mutate(id, fields.map(field => ({ op: 'unset' as const, path: [field] }))),
     })
 
-    // --- `/approval-bash on | off | status` ---
-    scope.commands.register({
-      name: 'approval-bash',
-      description: 'Turn bash command approval on or off',
-      input: { hint: 'on | off | status' },
-      handler: async (invocation) => {
-        const mode = invocation.rawInput.trim()
-        if (mode === 'status') {
-          return { kind: 'success', text: `bash approval is ${bashSettings.get().enabled ? 'on' : 'off'}` }
-        }
-        if (mode === 'on' || mode === 'off') {
-          await bashSettings.update({ enabled: mode === 'on' })
-          return { kind: 'success', text: `bash approval turned ${mode}` }
-        }
-        return { kind: 'error', text: 'usage: /approval-bash on | off | status' }
-      },
-    })
+  // This bundle ships its own config card, so opt the entry out of a
+  // schema-generated page (the dsh-settings README's rule for a plugin with its
+  // own page). The owner MUST be this plugin's fiber — the policy is looked up
+  // by `entry.fiber`, so a child fiber's default would store it where nothing
+  // reads it. Inert today (no shipped client builds pages), and cheap to keep.
+  ctx.inject(['settings'], (child) => {
+    child.effect(
+      () => child.settings.configure({ auto: false }, ctx.fiber),
+      'dsh-edit-approval page policy',
+    )
+  })
 
-    // --- interception ---
+  registerToggleCommand(ctx, store, {
+    command: 'approval-edit',
+    label: 'edit approval',
+    field: 'editEnabled',
+    read: () => store?.loadEdit().enabled ?? DEFAULT_EDIT_APPROVAL.enabled,
+  })
+  registerToggleCommand(ctx, store, {
+    command: 'approval-bash',
+    label: 'bash approval',
+    field: 'bashEnabled',
+    read: () => store?.loadBash().enabled ?? DEFAULT_BASH_APPROVAL.enabled,
+  })
+
+  // --- interception ---
+  // Awaiting `tools` and `fs` here (rather than in `inject`) keeps the commands
+  // and the config page usable in a deployment without the file tools.
+  ctx.inject(['tools', 'fs'], (scope) => {
     scope.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
-      const live = settings.get()
-      const bashLive = bashSettings.get()
-      const editActive = live.enabled && live.tools.includes(exec.name)
-      const bashActive = bashLive.enabled && bashLive.tools.includes(exec.name)
+      if (store === undefined) return next()
+      const edit = store.loadEdit()
+      const bash = store.loadBash()
+      const editActive = edit.enabled && edit.tools.includes(exec.name)
+      const bashActive = bash.enabled && bash.tools.includes(exec.name)
       if (!editActive && !bashActive) return next()
-      // A session on the deterministic `never` policy (e.g. the
-      // danger-full-access preset) intends FULL access without prompting:
-      // every `ask` this plugin emits would be auto-rejected by the approval
-      // service, silently breaking edits AND commands. Delegate instead — the
-      // sandbox (or whatever else) keeps enforcing; this plugin just stops
-      // asking. Shared by both mirror features.
+      // A session on the deterministic `never` policy intends FULL access
+      // without prompting; delegate rather than emit an ask the service would
+      // auto-reject. Shared by both mirror features.
       if (resolvePolicy(exec, approvalService(scope)) === 'never') return next()
       const args = asRecord(exec.arguments)
       if (args === undefined) return next()
       // Bash branch: fs-free judgment. Edit wins on a tool-name overlap
       // (default whitelists cannot overlap).
       if (bashActive && !editActive) {
-        const bashSettingsLive: BashApprovalSettings = bashLive
-        const decision = decideCommandApproval({ settings: bashSettingsLive, toolName: exec.name, args })
+        const decision = decideCommandApproval({ settings: bash, toolName: exec.name, args })
         if (decision.kind === 'ask') return { kind: 'ask', reason: decision.reason }
         return next()
       }
@@ -239,7 +272,7 @@ export function apply(ctx: Context, config: Config): void {
       const filePath = targetPathOf(exec.name, args)
       if (filePath === undefined) return next()
       try {
-        const cwd = sessionCwd(exec, filePath)
+        const cwd = sessionCwd(exec)
         const target = await scope.fs.resolve(filePath, {
           ...cwd !== undefined ? { cwd } : {},
           signal: exec.signal,
@@ -249,7 +282,7 @@ export function apply(ctx: Context, config: Config): void {
         if (info !== undefined && info.type !== 'file') return next()
         const exists = info !== undefined
         const current = exists ? await scope.fs.readText(target, exec.signal) : ''
-        const decision = decideApproval({ settings: live, toolName: exec.name, args, current, exists })
+        const decision = decideApproval({ settings: edit, toolName: exec.name, args, current, exists })
         if (decision.kind === 'ask') return { kind: 'ask', reason: decision.reason }
         return next()
       } catch (error) {

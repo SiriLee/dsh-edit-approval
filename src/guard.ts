@@ -18,8 +18,10 @@ import {
   type DiffLine,
 } from './diff.ts'
 
-/** The tools this plugin intercepts by default (registered tool names). */
-export const DEFAULT_TOOLS: readonly string[] = ['write', 'edit', 'str_replace_editor']
+/**
+ * The default intercepted-tool list lives in `./config.ts` beside the schema
+ * defaults it feeds, so the document's defaults have one home.
+ */
 
 /** Fully resolved plugin settings (schema defaults + row config + user layer). */
 export interface EditApprovalSettings {
