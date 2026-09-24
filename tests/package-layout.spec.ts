@@ -25,7 +25,7 @@ const REMOVED_PACKAGES = [
 ]
 
 /** Every manifest layout item that must be shipped in the tarball. */
-const REQUIRED_FILES = ['lib', 'cordis.patch.yml', 'LICENSE', 'README.md', 'README.zh.md', 'locale/*.json']
+const REQUIRED_FILES = ['lib', 'docs', 'cordis.patch.yml', 'LICENSE', 'README.md', 'README.zh.md', 'locale/*.json']
 
 describe('manifest identity', () => {
   it('names the package once, consistently', () => {
@@ -74,7 +74,7 @@ describe('export surface', () => {
     for (const entry of REQUIRED_FILES) {
       expect(pkg.files, `files is missing ${entry}`).toContain(entry)
     }
-    for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'cordis.patch.yml']) {
+    for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'cordis.patch.yml', 'docs/README.md', 'docs/compat/0.1.7-audit.md']) {
       expect(existsSync(join(ROOT, file)), `${file} does not exist`).toBe(true)
     }
   })

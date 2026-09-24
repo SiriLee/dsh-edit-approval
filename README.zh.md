@@ -1,6 +1,6 @@
 # dsh-edit-approval
 
-为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**先询问后执行**的审批：**每次 `write` / `edit` / `str_replace_editor` 调用都在文件真正落盘前先询问——弹出红绿行级 diff，同意一次 / 拒绝——每次 `bash` 命令执行前也先询问**，两者在 Settings → General 各有独立总开关。
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**先询问后执行**的审批：**每次 `write` / `edit` 调用都在文件真正落盘前先询问——弹出红绿行级 diff，同意一次 / 拒绝——每次 `bash` 命令执行前也先询问**，两者各自的总开关位于 **Settings → Plugins** 里本插件的卡片上。
 
 [![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
 [![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
@@ -11,23 +11,23 @@
 
 | 审批门 | 拦截目标 | 默认 | 面板 |
 | --- | --- | --- | --- |
-| **编辑审批** | `write` / `edit` / `str_replace_editor` | 开 | 红绿行级 diff——同意一次 / 拒绝 |
+| **编辑审批** | `write` / `edit`（`str_replace_editor` 需自行选入） | 开 | 红绿行级 diff——同意一次 / 拒绝 |
 | **命令审批** | `bash` | 关 | 描述 headline + 原生命令行 |
 
 两扇门共用 harness 自带的 `serviceAsk` seam：插件在 `tools/pre-execute` 返回 `{ kind: 'ask', reason }`，harness 将其路由进 Web 审批面板——**host 端零 UI 改动**——`allowed-once` 继续执行、`rejected` 拒绝调用；在 `never` 策略下插件直接委托，全权会话照常工作。
 
 ## 效果预览
 
-安装后 Settings → General 出现两行开关——**编辑审批 / 命令审批**。所有写类调用先弹出红绿 diff 面板；开启命令审批后，每条命令先弹出面板：白色 headline 是 agent 的描述，灰色行是命令原文。
+所有写类调用先弹出红绿 diff 面板；开启命令审批后，每条命令先弹出面板：白色 headline 是 agent 的描述，灰色行是命令原文。两个总开关位于 **Settings → Plugins** 里本插件的卡片上。
 
 <table>
   <tr>
-    <td align="center"><img src="assets/screenshots/settings-rows.png" width="440" alt="Settings → General：编辑审批与命令审批两行开关"><br><sub>Settings → General 总开关</sub></td>
     <td align="center"><img src="assets/screenshots/edit-approval-panel.png" width="440" alt="编辑审批面板：红绿行级 diff"><br><sub>编辑审批面板——红绿行级 diff</sub></td>
+    <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="命令审批面板：描述 headline 与命令行"><br><sub>命令审批面板——描述 + 命令</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="命令审批面板：描述 headline 与命令行"><br><sub>命令审批面板——描述 + 命令</sub></td>
     <td align="center"><img src="assets/screenshots/approval-commands.png" width="440" alt="/approval-edit 与 /approval-bash 命令"><br><sub>/approval-edit 与 /approval-bash 命令</sub></td>
+    <td align="center"><sub>两个总开关在 <b>Settings → Plugins</b> 的本插件卡片上暂存：拨动后按 <b>保存</b>。</sub></td>
   </tr>
 </table>
 
@@ -43,11 +43,11 @@ dsh plugin --profile web add dsh-edit-approval
 
 ## 使用
 
-1. **编辑审批默认开启。** 任何 `write` / `edit` / `str_replace_editor` 调用都在文件被触碰前先询问。面板只显示改动行——删除红色、新增绿色——带右对齐 `NN|` 行号 gutter，被跳过的上下文与 hunk 间隔以 `…` 省略号标记。
+1. **编辑审批默认开启。** 任何 `write` / `edit` 调用都在文件被触碰前先询问。面板只显示改动行——删除红色、新增绿色——带右对齐 `NN|` 行号 gutter，被跳过的上下文与 hunk 间隔以 `…` 省略号标记。
 2. **同意一次 / 拒绝。** `allowed-once` 放行该调用；`rejected` 拒绝并反馈给模型。
-3. **命令审批默认关闭**——在 Settings → General 或通过下面的命令开启。面板白色 headline 是描述（如 `bash · push to remote`）；下方灰色行是命令原文，由 harness 原生渲染。
-4. **命令行入口：** `/approval-edit on|off|status` 与 `/approval-bash on|off|status`——与设置行同源。
-5. **白名单（仅配置文件）：** `bash-approval` 设置命名空间下，`allow` 存放始终放行的命令前缀。匹配做了空白归一化（`git  push` 命中 `git push`），无法用多余空格绕过。暂不提供 UI。
+3. **命令审批默认关闭**——在本插件卡片上或通过下面的命令开启。面板白色 headline 是描述（如 `bash · push to remote`）；下方灰色行是命令原文，由 harness 原生渲染。
+4. **命令行入口：** `/approval-edit on|off|status` 与 `/approval-bash on|off|status`——与配置页写同一份文档，两者不可能不一致。
+5. **白名单（仅配置文件）：** `bashAllow` 存放始终放行的命令前缀。匹配做了空白归一化（`git  push` 命中 `git push`），无法用多余空格绕过。暂不提供 UI。
 
 ## 原理
 
@@ -57,102 +57,116 @@ dsh plugin --profile web add dsh-edit-approval
 
 对每个被拦截的写类调用：
 
-1. **解析目标文件**：经 `ctx.fs` 解析路径，沿用 fs 工具的会话 cwd 规则（相对路径含 `..` 时对 cwd 做规范化）。
-2. **读取当前内容**并按工具参数重建**拟写入内容**，镜像各工具语义：`write` — 全文；`edit` — 唯一替换（或 `replace_all`）；`str_replace_editor` — `str_replace` 唯一替换、`insert` 按行插入、`create` 用 `file_text`。
-3. **计算行级 diff**：用 jsdiff 的 `structuredPatch`（Myers）——与 harness 的 write/edit 结果卡同一参考实现、同一 3 行上下文窗口——因此**审批预览与执行后的结果卡同源同形**，大文件里改 1 行仍是 1 行 diff。
-4. **返回 `{ kind: 'ask', reason }`**：头部一行（`工具名 · 文件 (操作): N insertions, M deletions`）加 diff 文本。harness 的 `serviceAsk` 经 `ctx.approval` 路由进 Web 审批面板。
+1. **解析目标文件**：经 `ctx.fs` 解析路径，使用 fs 工具所写的会话 cwd 原文（DSH 0.1.7 起 fs 工具不再对含 `..` 的 cwd 做规范化，本预览同样不做）。
+2. **读取当前内容**，并按各工具自身的语义从参数重建"拟写入内容"：`write`——全文；`edit`——单次唯一替换（或 `replace_all`）；`str_replace_editor`——`str_replace` 唯一替换、`insert` 按行插入、`create` 取 `file_text`。
+3. **计算行级 diff**：用 jsdiff 的 `structuredPatch`（Myers），与 harness 写类结果卡片同一个参考实现、同一个 3 行上下文窗口——因此审批预览与批准后的结果卡片同源，大文件里改一行就只显示一行。
+4. **返回 `{ kind: 'ask', reason }`**：首行是摘要（`tool · file (op): N insertions, M deletions`），其后是 diff 文本。harness 的 `serviceAsk` 将其经 `ctx.approval` 路由进 Web 审批面板。
 
 ### 2. 命令审批
 
-纯决策，**不碰 fs**——不读不写任何东西：
+纯判定，**完全不碰 fs**——既不读也不写：
 
-- 门关闭、工具不在 `tools` 列表、命令为空，或属于**沙箱升级调用**（带 `sandbox_permissions` + `justification`——它们自带审批，不能二次弹窗）时直接放行。
-- **白名单优先**：空白归一化后的前缀命中即免询问放行。
-- 否则返回 `{ kind: 'ask', reason }`，headline 单行——`bash · <描述>`（描述为空时退化为 `bash`）。命令文本**不**嵌入 reason：harness 会在面板命令行原生渲染，避免内容重复。
+- 以下情况直接放行：门已关闭、工具不在 `bashTools` 中、命令为空、或该调用是**沙箱提权**（带 `sandbox_permissions` + `justification`，它们自带审批，不能重复询问）。
+- **白名单优先**：空白归一化后的前缀命中即放行。
+- 否则返回 `{ kind: 'ask', reason }`，只有一行 headline——`bash · <描述>`（描述为空时就是 `bash`）。命令原文**不**写进 reason：harness 会在面板的命令行里原生渲染，避免重复。
 
 ### 3. 共享策略处理
 
-会话审批策略（`ask` / `never`）持续生效。在 `never`（如 `danger-full-access`）下，插件发出的每个 `ask` 都会被审批服务确定性转为拒绝，导致全权会话里所有编辑与命令被静默打断——因此两扇门都通过 `next()` 委托、交由沙箱约束。插件绝不扩大权限，也不改变沙箱模式。
+会话审批策略（`ask` / `never`）始终生效。在 `never` 下（如 `danger-full-access`），本插件发出的每个 `ask` 都会被审批服务确定性拒绝，从而静默打断全权会话里的所有编辑与命令——所以两扇门都改为经 `next()` 委托，交由沙箱执行。插件绝不扩大权限，也不改动沙箱模式。
 
 ### 4. 审批面板
 
-浏览器端（`dsh.client`）按动画帧合并的 `MutationObserver` 发现并增强面板，所有副作用收敛在单个 `ctx.effect`（卸载 / HMR 时完整清理）：
+浏览器半边（`dsh.client`）在面板出现时增强它（按动画帧合并的 `MutationObserver`，所有副作用都在单个 `ctx.effect` 内，卸载 / HMR 时拆除）：
 
-- **编辑面板**：把纯文本 headline 重建为**仅改动行**——删除红色、新增绿色、右对齐 `NN|` 行号——并注入 `white-space: pre-wrap` 补偿样式、为多行 diff 安装折叠按钮。
-- **命令面板**：保持 harness 原生——只打 `dsh-ea-kind-command` 标记，不重写、不重排——白色描述 headline 与灰色命令行就是 harness 原样渲染的结果。
+- **编辑面板**：从纯文本 headline 重建为只有改动行——删除红色、新增绿色、右对齐 `NN|` gutter——并附 `white-space: pre-wrap` 补偿，多行 diff 再加一个折叠按钮。
+- **命令面板**：保持 harness 原生外观，只加一个 `dsh-ea-kind-command` 标记，不重排样式、不重建——白色描述 headline 与灰色命令行就是 harness 渲染的样子。
 
 ## 配置
 
-运行时配置位于两个设置命名空间——`edit-approval` 与 `bash-approval`——层级为**schema 默认值 < cordis 行 config < 用户设置页（持久化）**。cordis 行默认不带 config；profile patch 只需重写要改的键即可覆盖部署默认值：
+本插件的全部配置就是**一个 profile 条目**——bundle patch 插入的 `dsh-edit-approval` 行——分层为 **schema 默认值 < 行配置 < 用户配置页（持久化）**。patch 刻意不带 config：`src/index.ts` 里的 schema 默认值是唯一真源，profile patch 只需重述它要改的键：
 
 ```yaml
 # profile 的 cordis.patch.yml
 - id: dsh-edit-approval
   name: dsh-edit-approval
   config:
-    minDiffLines: 2
-    includeCreate: false
+    editMinDiffLines: 2
+    editIncludeCreate: false
+    bashEnabled: true
 ```
 
-| 命名空间 | 键 | 默认 | 说明 |
+| 键 | 默认 | 位置 | 说明 |
 | --- | --- | --- | --- |
-| `edit-approval` | `enabled` | `true` | 编辑审批总开关 |
-| `edit-approval` | `tools` | `['write','edit','str_replace_editor']` | 拦截白名单（注册工具名） |
-| `edit-approval` | `minDiffLines` | `0` | 变更行数**至少**达到此值才询问；更小的改动静默放行 |
-| `edit-approval` | `includeCreate` | `true` | 新建文件是否询问 |
-| `edit-approval` | `includeDelete` | `true` | 清空/删除文件是否询问 |
-| `bash-approval` | `enabled` | `false` | 命令审批总开关 |
-| `bash-approval` | `tools` | `['bash']` | 拦截白名单（注册工具名） |
-| `bash-approval` | `allow` | `[]` | 始终放行的命令前缀（空白归一化匹配） |
+| `editEnabled` | `true` | 配置页 | 编辑审批总开关 |
+| `bashEnabled` | `false` | 配置页 | 命令审批总开关 |
+| `editTools` | `['write','edit']` | 配置文件 | 被拦截的写类工具名 |
+| `editMinDiffLines` | `0` | 配置文件 | 改动达到**至少**这么多行才询问；更小的改动静默放行 |
+| `editIncludeCreate` | `true` | 配置文件 | 新建文件是否询问 |
+| `editIncludeDelete` | `true` | 配置文件 | 清空 / 置空文件是否询问 |
+| `bashTools` | `['bash']` | 配置文件 | 被拦截的命令类工具名 |
+| `bashAllow` | `[]` | 配置文件 | 始终放行的命令前缀（空白归一化） |
 
-配置面按契约**前向兼容**：新键只增不改不删、且必须带默认值——旧版本插件静默忽略未知键，因此新配置文件在旧版本上依然安全。
+只有两个总开关是 live 字段——这正是它们成为"配置页唯一展示、也是设置写入唯一可寻址"字段的原因：改动立即生效，无需重启。其余都是普通配置，在条目加载时读取，因此放在 profile 文件里。
+
+开关被拨回 schema 默认值时是**清除**而非固化，所以 profile patch 只保留你真正改过的东西，日后的默认值变更仍能送达你。
+
+`str_replace_editor` 默认不被拦截——它自 DSH 0.1.3 起不再是默认工具。针对它的 guard 分支仍然随包发布并有单测；把 `str_replace_editor` 加进 `editTools` 即可启用。
+
+> **从 0.3.x 升级。** `edit-approval` 与 `bash-approval` 两个设置命名空间已不存在，键名改为上面的扁平字段。DSH 的设置服务会把旧 `settings.yaml` 的 section 导入**同名**条目，而这两个旧名字都不是 profile 条目 id，因此**不会迁移**。若你此前开着命令审批，请在 profile patch 里写上 `bashEnabled: true`（或在新配置页拨一次）。
 
 ## 明确不做的事
 
-- **不越权、不扩大沙箱**——从不改变沙箱模式或授予权限；升级调用放行给沙箱自己的审批。
-- **不拦截命令内部的编辑**——`bash` 命令内执行的文件修改不受编辑门管辖（开启命令审批后由命令门覆盖）。
-- **不支持部分应用**——diff 是只读预览（`+` / `-` 行标记），不能只应用其中几行。
-- **工具自身会失败的情形不询问**——如 `str_replace_editor create` 命中已存在文件、`old_str` / `old_string` 非唯一或缺失，放行由工具报错。空 `old_string` 的 `edit` 预览与工具行为有偏差（视为 not-found 放行）——偏差方向安全，不会误拦截。
-- **键盘快捷键**（Enter 审批 / Esc 拒绝）——已拆分到独立插件 [dsh-approval-hotkeys](https://github.com/SiriLee/dsh-approval-hotkeys)。
-- **编辑后审查 / 回滚**——由社区 [dsh-change-review](https://github.com/cirelir/dsh-change-review) 覆盖。
-- **权限档位扩展**——由社区 [dsh-auto-approval-plugin](https://github.com/StyxNether/dsh-auto-approval-plugin) 覆盖。
+- **不绕过也不扩大沙箱**——从不改动沙箱模式或授予权限；提权调用交给沙箱自己的审批。
+- **不拦截命令内部**——在 `bash` 命令里发生的文件改动不由编辑门管辖（开启命令审批后由它覆盖）。
+- **不做部分应用**——diff 是只读预览（`+` / `-` 行标记），不支持"只应用其中几行"。
+- **不对工具本身会失败的调用提问**——例如对已存在文件执行 `str_replace_editor create`、`old_str` / `old_string` 缺失或不唯一；这些直接放行，由工具自己报错。空的 `old_string` 编辑预览与工具行为有偏差（按"未找到"处理）——这是安全的，绝不会误拦。
+- **不做快捷键**（Enter 批准 / Esc 拒绝）——已拆到独立的 [dsh-approval-hotkeys](https://github.com/SiriLee/dsh-approval-hotkeys) 插件。
+- **不做改后复查 / 回滚**——见社区插件 [dsh-change-review](https://github.com/cirelir/dsh-change-review)。
+- **不扩展权限层级**——见社区插件 [dsh-auto-approval-plugin](https://github.com/StyxNether/dsh-auto-approval-plugin)。
 
 ## 兼容性
 
 - Node.js `^22.19.0 || >=24.0.0`。
-- DeepSeek Harness web 配置档（`dsh --profile web`）；`@deepseek-ai/*` peer 包由 harness 运行时提供。
-- 声明对准**已实测的 DSH 范围**：每个*受支持*的版本元组一个 `||` 项——`^0.1.0-rc.6 || ^0.1.1-rc.2 || ^0.1.2-rc.1 || ^0.1.5-rc.1`（`@deepseek-ai/dsh-settings` 保留自身的 `^0.1.0-rc.8` 地板），并由 `dsh.engines.dsh` 声明运行时下限 `>=0.1.0-rc.6`。npm 预发布匹配要求候选与比较器处于同一 [major, minor, patch] 元组，且没有任何简写能表达「`0.1.x` 全系列预发布」，因此每新增一个元组系列就要追加一个 `||` 项；同一元组内的 rc 滚动（`rc.2 → rc.3`）无需更新。`node scripts/check-dsh-version.mjs` 守护这份声明（各 peer 元组序列一致、engines 下限同步、没有发布超出上限）。`0.1.2` 的 alpha 线以及未经实测的 `0.1.3-alpha.2` 不在声明窗口内：客户端仍按能力存在探测而非解析版本号，alpha 线的兼容分支保留，但不再作为声明目标。
-- 客户端按**能力存在**探测版本（`ctx.get('uiConversation')` 是否解析、会话快照是否仍携带 `chat`/`pending`），绝不解析版本字符串。会话/聊天读取走**双通道适配器**：rc.2 读会话面快照的 `chat`/`pending`，alpha.1+ 读 `uiConversation` 服务的命名 "chat" 视图；两代都缺则退化为 `undefined`（不崩）。注册工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。
+- DeepSeek Harness web profile（`dsh --profile web`）；`@deepseek-ai/*` 由 harness 在运行时解析，本包不会自行拉取。
+- **仅支持 DSH `0.1.7-rc.1`**，声明为单个 `^0.1.7-rc.1` peer 元组，`dsh.engines.dsh = ">=0.1.7-rc.1"`。本插件一次只追一条 DSH 线，不保持对更早版本线的兼容：声明之外的运行时会在启动时**跳过该 bundle 并给出 peer 诊断**，而不是把它加载成半坏状态。同元组的预发布滚动（`rc.1 → rc.2`）无需改动。
+- `node scripts/check-dsh-version.mjs` 盯发布节奏：校验声明自洽（各 harness peer 同一元组、engine floor 同步），并在 DSH 发布了声明窗口之上的版本时报告。
+- **为什么是单线。** DSH 0.1.7 把本插件两扇门共用的设置命名空间注册表换成了"每个 profile 条目一个 live `Config`"，同时删除了浏览器侧 `dsh-client-runtime` 包与 `settingsScope` 服务。旧模型没有 1:1 后继，因此同时兼容更早的线意味着维护两套设置模型、两条客户端写路径与两种会话读取形状。逐 seam 的完整记录（包括哪些失效是静默的）见 [docs/compat/0.1.7-audit.md](docs/compat/0.1.7-audit.md)。
+- 注册的工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。
 
 > [!WARNING]
-> 本项目与 DSH 均处于 developer preview。可复现环境请固定精确版本，并留意上文的行为说明。
+> 本项目与 DSH 均处于开发者预览阶段。请在可复现环境中 pin 精确版本，并留意上述行为说明。
 
 ## 安全
 
-插件仅在 `tools/pre-execute` 拦截点读取目标文件以计算编辑预览；命令门完全不碰文件。它从不自行写入文件——只有在你批准后，工具本体才执行写入。无网络请求，不访问任何凭据。
+插件只在 `tools/pre-execute` 拦截点读取目标文件以计算编辑预览；命令门完全不碰文件。它自己从不写文件——工具主体只在你批准后才执行写入。它不发起网络请求，也不访问任何凭据。
 
 ## 开发
 
 ```sh
-npm install            # devDeps 来自 npm registry
-npm run typecheck      # tsc 双编译面（host + client）
-npm test               # vitest：diff / guard / command-guard / display-parity / 集成 / client 套件
-npm run build          # 全量构建：tsc → lib/（含 .d.ts）+ lib/client.js bundle
-npm run build:portable # 可选：轻量 esbuild 构建，不做类型检查
-node scripts/verify-host.mjs   # 对 BUILT host 产物做端到端验证（两个命名空间 + 全部命令路径）
+npm install            # 装 devDeps（harness 包精确钉到目标线）
+npm run typecheck      # 对两套编译面做 tsc，跑在真实 DSH 类型上
+npm test               # vitest：diff / guards / config / integration / client / package-layout
+npm run build          # scripts/build.mjs：声明 + 两个产物 + 冒烟检查
+npm run verify:host    # 在真实 cordis Context 上驱动**已构建**的 host 产物
+npm run check          # typecheck + tests + build + verify:host + npm pack --dry-run
 ```
 
-`prepare` 生命周期运行全量构建，因此 git 安装与 `npm pack` / `npm publish` 始终得到完整的 `lib/`（含 `.d.ts`）与 `LICENSE`。
+`prepare` 会跑构建，因此 git 安装与 `npm pack` / `npm publish` 始终产出完整的 `lib/`（含 `.d.ts`）与 `LICENSE`。
+
+其中两步的存在，是因为让本插件整整报废一条 DSH 线的两种失效**都是静默的**：
+
+- 构建会被自己的冒烟检查拦住：客户端产物**不允许内联任何 `node_modules` 输入**（经 esbuild 的 metafile 检查），所以 externals 列表漏掉一个平台模块会让构建失败，而不是悄悄打进第二份 React；同时两个产物都不得引用目标线已删除的包。
+- `verify:host` 把 settings 替身**双向**锚定到真实的 `SettingsForms.prototype`。此前那个替身只实现了一个方法——`settings.register`，恰好是 0.1.7 删掉的那一个——于是套件与插件互相印证、与真实世界无关，绿着穿过了它本该拦住的那次断裂。
 
 ## 发布
 
-发版走 GitHub Actions Trusted Publishing（OIDC，无需存储 `NPM_TOKEN`）。详见 [docs/npm-trusted-publishing-guide.md](docs/npm-trusted-publishing-guide.md)。
+发布走 GitHub Actions Trusted Publishing（OIDC，不存 `NPM_TOKEN`）。见 [docs/npm-trusted-publishing-guide.md](docs/npm-trusted-publishing-guide.md)。
 
 ```sh
 npm version patch && git push origin main --tags   # 触发 .github/workflows/publish.yml
 ```
 
-workflow 会校验 tag 与 `package.json` 版本一致，执行 typecheck + 测试 + 全量构建 + 产物验证，以 Sigstore provenance 发布并创建 GitHub Release。CI（`.github/workflows/ci.yml`）在每次 push / PR 上运行同样的检查。发布步骤幂等——版本已在 npm 则跳过。
+工作流会校验 tag 与 `package.json` 一致，跑 typecheck + 测试 + 完整构建 + 产物校验，带 Sigstore provenance 发布，并创建 GitHub Release。CI（`.github/workflows/ci.yml`）在每次 push / PR 上跑同样的检查。发布步骤是幂等的——npm 上已存在的版本会被跳过。
 
 ## 许可
 
