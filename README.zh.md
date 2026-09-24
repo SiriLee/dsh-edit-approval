@@ -1,6 +1,6 @@
 # dsh-edit-approval
 
-为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**先询问后执行**的审批：**每次 `write` / `edit` 调用都在文件真正落盘前先询问——弹出红绿行级 diff，同意一次 / 拒绝——每次 `bash` 命令执行前也先询问**，两者各自的总开关位于 **Settings → Plugins** 里本插件的卡片上。
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供**先询问后执行**的审批：**每次 `write` / `edit` 调用都在文件真正落盘前先询问——弹出红绿行级 diff，同意一次 / 拒绝——每次 `bash` 命令执行前也先询问**，两者各自的总开关位于侧栏「插件」面板里本插件的页面上。
 
 [![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
 [![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
@@ -18,7 +18,7 @@
 
 ## 效果预览
 
-所有写类调用先弹出红绿 diff 面板；开启命令审批后，每条命令先弹出面板：白色 headline 是 agent 的描述，灰色行是命令原文。两个总开关位于 **Settings → Plugins** 里本插件的卡片上。
+所有写类调用先弹出红绿 diff 面板；开启命令审批后，每条命令先弹出面板：白色 headline 是 agent 的描述，灰色行是命令原文。两个总开关位于侧栏「插件」面板里本插件的页面上，走 harness 自带的表单暂存（截图为 v0.4.0）。
 
 <table>
   <tr>
@@ -26,8 +26,8 @@
     <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="命令审批面板：描述 headline 与命令行"><br><sub>命令审批面板——描述 + 命令</sub></td>
   </tr>
   <tr>
+    <td align="center"><img src="assets/screenshots/bundle-config-card.png" width="440" alt="侧栏「插件」面板里本插件的页面：编辑审批与命令审批开关及保存按钮"><br><sub>总开关在侧栏「插件」面板里本插件的页面上</sub></td>
     <td align="center"><img src="assets/screenshots/approval-commands.png" width="440" alt="/approval-edit 与 /approval-bash 命令"><br><sub>/approval-edit 与 /approval-bash 命令</sub></td>
-    <td align="center"><sub>两个总开关在 <b>Settings → Plugins</b> 的本插件卡片上暂存：拨动后按 <b>保存</b>。</sub></td>
   </tr>
 </table>
 
@@ -45,8 +45,8 @@ dsh plugin --profile web add dsh-edit-approval
 
 1. **编辑审批默认开启。** 任何 `write` / `edit` 调用都在文件被触碰前先询问。面板只显示改动行——删除红色、新增绿色——带右对齐 `NN|` 行号 gutter，被跳过的上下文与 hunk 间隔以 `…` 省略号标记。
 2. **同意一次 / 拒绝。** `allowed-once` 放行该调用；`rejected` 拒绝并反馈给模型。
-3. **命令审批默认关闭**——在本插件卡片上或通过下面的命令开启。面板白色 headline 是描述（如 `bash · push to remote`）；下方灰色行是命令原文，由 harness 原生渲染。
-4. **命令行入口：** `/approval-edit on|off|status` 与 `/approval-bash on|off|status`——与配置页写同一份文档，两者不可能不一致。
+3. **命令审批默认关闭**——在本插件页面上或通过下面的命令开启。面板白色 headline 是描述（如 `bash · push to remote`）；下方灰色行是命令原文，由 harness 原生渲染。
+4. **命令行入口：** `/approval-edit on|off|status` 与 `/approval-bash on|off|status`——与该面板写同一份文档，两者不可能不一致。
 5. **白名单（仅配置文件）：** `bashAllow` 存放始终放行的命令前缀。匹配做了空白归一化（`git  push` 命中 `git push`），无法用多余空格绕过。暂不提供 UI。
 
 ## 原理
@@ -83,7 +83,7 @@ dsh plugin --profile web add dsh-edit-approval
 
 ## 配置
 
-本插件的全部配置就是**一个 profile 条目**——bundle patch 插入的 `dsh-edit-approval` 行——分层为 **schema 默认值 < 行配置 < 用户配置页（持久化）**。patch 刻意不带 config：`src/index.ts` 里的 schema 默认值是唯一真源，profile patch 只需重述它要改的键：
+本插件的全部配置就是**一个 profile 条目**——bundle patch 插入的 `dsh-edit-approval` 行——分层为 **schema 默认值 < 行配置 < 持久化用户层**。patch 刻意不带 config：`src/index.ts` 里的 schema 默认值是唯一真源，profile patch 只需重述它要改的键：
 
 ```yaml
 # profile 的 cordis.patch.yml
@@ -97,22 +97,22 @@ dsh plugin --profile web add dsh-edit-approval
 
 | 键 | 默认 | 位置 | 说明 |
 | --- | --- | --- | --- |
-| `editEnabled` | `true` | 配置页 | 编辑审批总开关 |
-| `bashEnabled` | `false` | 配置页 | 命令审批总开关 |
-| `editTools` | `['write','edit']` | 配置文件 | 被拦截的写类工具名 |
-| `editMinDiffLines` | `0` | 配置文件 | 改动达到**至少**这么多行才询问；更小的改动静默放行 |
-| `editIncludeCreate` | `true` | 配置文件 | 新建文件是否询问 |
-| `editIncludeDelete` | `true` | 配置文件 | 清空 / 置空文件是否询问 |
-| `bashTools` | `['bash']` | 配置文件 | 被拦截的命令类工具名 |
-| `bashAllow` | `[]` | 配置文件 | 始终放行的命令前缀（空白归一化） |
+| `editEnabled` | `true` | 「插件」面板 | 编辑审批总开关 |
+| `bashEnabled` | `false` | 「插件」面板 | 命令审批总开关 |
+| `editTools` | `['write','edit']` | profile 文件 | 被拦截的写类工具名 |
+| `editMinDiffLines` | `0` | profile 文件 | 改动达到**至少**这么多行才询问；更小的改动静默放行 |
+| `editIncludeCreate` | `true` | profile 文件 | 新建文件是否询问 |
+| `editIncludeDelete` | `true` | profile 文件 | 清空 / 置空文件是否询问 |
+| `bashTools` | `['bash']` | profile 文件 | 被拦截的命令类工具名 |
+| `bashAllow` | `[]` | profile 文件 | 始终放行的命令前缀（空白归一化） |
 
-只有两个总开关是 live 字段——这正是它们成为"配置页唯一展示、也是设置写入唯一可寻址"字段的原因：改动立即生效，无需重启。其余都是普通配置，在条目加载时读取，因此放在 profile 文件里。
+只有两个总开关是 live 字段——这正是它们成为"「插件」面板唯一展示、也是设置写入唯一可寻址"字段的原因：改动立即生效，无需重启。其余都是普通配置，在条目加载时读取，因此放在 profile 文件里。
 
 开关被拨回 schema 默认值时是**清除**而非固化，所以 profile patch 只保留你真正改过的东西，日后的默认值变更仍能送达你。
 
 `str_replace_editor` 默认不被拦截——它自 DSH 0.1.3 起不再是默认工具。针对它的 guard 分支仍然随包发布并有单测；把 `str_replace_editor` 加进 `editTools` 即可启用。
 
-> **从 0.3.x 升级。** `edit-approval` 与 `bash-approval` 两个设置命名空间已不存在，键名改为上面的扁平字段。DSH 的设置服务会把旧 `settings.yaml` 的 section 导入**同名**条目，而这两个旧名字都不是 profile 条目 id，因此**不会迁移**。若你此前开着命令审批，请在 profile patch 里写上 `bashEnabled: true`（或在新配置页拨一次）。
+> **从 0.3.x 升级。** `edit-approval` 与 `bash-approval` 两个设置命名空间已不存在，键名改为上面的扁平字段。DSH 的设置服务会把旧 `settings.yaml` 的 section 导入**同名**条目，而这两个旧名字都不是 profile 条目 id，因此**不会迁移**。若你此前开着命令审批，请在 profile patch 里写上 `bashEnabled: true`（或在该面板拨一次）。
 
 ## 明确不做的事
 

@@ -1,6 +1,6 @@
 # dsh-edit-approval
 
-Ask-before-act approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): **every `write` / `edit` call asks before the file is touched — a red/green line-level diff, approve once or reject — and every `bash` command asks before it runs**, each with its own master switch on the plugin's card in Settings → Plugins.
+Ask-before-act approval for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): **every `write` / `edit` call asks before the file is touched — a red/green line-level diff, approve once or reject — and every `bash` command asks before it runs**, each with its own master switch on the plugin's own page under **Plugins** in the sidebar.
 
 [![npm version](https://img.shields.io/npm/v/dsh-edit-approval.svg)](https://www.npmjs.com/package/dsh-edit-approval)
 [![npm license](https://img.shields.io/npm/l/dsh-edit-approval.svg)](https://github.com/SiriLee/dsh-edit-approval/blob/main/LICENSE)
@@ -18,7 +18,7 @@ Both gates ride the harness's own `serviceAsk` seam: the plugin returns `{ kind:
 
 ## Preview
 
-Every write-family call shows the red/green diff panel; after you enable command approval, every command shows a panel whose white headline is the agent's description and whose grey row is the raw command text. Both master switches live on this bundle's card in **Settings → Plugins**.
+Every write-family call shows the red/green diff panel; after you enable command approval, every command shows a panel whose white headline is the agent's description and whose grey row is the raw command text. Both master switches live on this bundle's page in the sidebar's **Plugins** panel, staged through the harness's own form (captured on v0.4.0).
 
 <table>
   <tr>
@@ -26,8 +26,8 @@ Every write-family call shows the red/green diff panel; after you enable command
     <td align="center"><img src="assets/screenshots/bash-approval-panel.png" width="440" alt="Bash approval panel: description headline and command row"><br><sub>Bash approval panel — description + command</sub></td>
   </tr>
   <tr>
+    <td align="center"><img src="assets/screenshots/bundle-config-card.png" width="440" alt="The plugin's page under Plugins in the sidebar: Edit approval and Command approval switches plus Save"><br><sub>Master switches on the bundle's page in the sidebar's Plugins panel</sub></td>
     <td align="center"><img src="assets/screenshots/approval-commands.png" width="440" alt="/approval-edit and /approval-bash slash commands"><br><sub>/approval-edit and /approval-bash commands</sub></td>
-    <td align="center"><sub>The two master switches are staged on the bundle's card in <b>Settings → Plugins</b>: flip one and press <b>Save</b>.</sub></td>
   </tr>
 </table>
 
@@ -46,7 +46,7 @@ For contributors: install from a local checkout or a pinned commit — `dsh plug
 1. **Edit approval is on by default.** Any `write` / `edit` call asks before the file is touched. The panel shows only the changed lines — removals red, additions green — with a right-aligned `NN|` line-number gutter and a `…` ellipsis marking skipped context and hunk gaps.
 2. **Approve once or reject.** `allowed-once` lets the call proceed; `rejected` denies it and reports back to the model.
 3. **Command approval is off by default** — enable it on the plugin's card or with the command below. The panel's white headline is the description (e.g. `bash · push to remote`); the grey row below is the raw command text, rendered natively by the harness.
-4. **Command-line entry:** `/approval-edit on|off|status` and `/approval-bash on|off|status` — the same document the config page edits, so the two cannot disagree.
+4. **Command-line entry:** `/approval-edit on|off|status` and `/approval-bash on|off|status` — the same document the Plugins panel edits, so the two cannot disagree.
 5. **Allow-list (config file):** `bashAllow` holds command prefixes that always pass. Matching is whitespace-normalized (`git  push` hits `git push`) so a bypass via extra spaces fails. There is deliberately no UI for it yet.
 
 ## How it works
@@ -83,7 +83,7 @@ The browser half (`dsh.client`) enhances panels as they appear (a per-animation-
 
 ## Configuration
 
-The plugin's whole configuration is **one profile entry** — the `dsh-edit-approval` row its bundle patch inserts — layered as **schema defaults < row config < user config page (persisted)**. The patch ships no config on purpose: the schema defaults in `src/index.ts` are the single source of truth, so a profile patch restates only the keys it changes:
+The plugin's whole configuration is **one profile entry** — the `dsh-edit-approval` row its bundle patch inserts — layered as **schema defaults < row config < persisted user layer**. The patch ships no config on purpose: the schema defaults in `src/index.ts` are the single source of truth, so a profile patch restates only the keys it changes:
 
 ```yaml
 # profile's cordis.patch.yml
@@ -97,16 +97,16 @@ The plugin's whole configuration is **one profile entry** — the `dsh-edit-appr
 
 | Key | Default | Where | Description |
 | --- | --- | --- | --- |
-| `editEnabled` | `true` | config page | Master switch for edit approval |
-| `bashEnabled` | `false` | config page | Master switch for command approval |
-| `editTools` | `['write','edit']` | config file | Intercepted write-family tool names |
-| `editMinDiffLines` | `0` | config file | Ask only when the change touches **at least** this many lines; smaller changes pass silently |
-| `editIncludeCreate` | `true` | config file | Whether creating a new file asks for approval |
-| `editIncludeDelete` | `true` | config file | Whether clearing/emptying a file asks for approval |
-| `bashTools` | `['bash']` | config file | Intercepted command-tool names |
-| `bashAllow` | `[]` | config file | Command prefixes that always pass (whitespace-normalized) |
+| `editEnabled` | `true` | Plugins panel | Master switch for edit approval |
+| `bashEnabled` | `false` | Plugins panel | Master switch for command approval |
+| `editTools` | `['write','edit']` | profile file | Intercepted write-family tool names |
+| `editMinDiffLines` | `0` | profile file | Ask only when the change touches **at least** this many lines; smaller changes pass silently |
+| `editIncludeCreate` | `true` | profile file | Whether creating a new file asks for approval |
+| `editIncludeDelete` | `true` | profile file | Whether clearing/emptying a file asks for approval |
+| `bashTools` | `['bash']` | profile file | Intercepted command-tool names |
+| `bashAllow` | `[]` | profile file | Command prefixes that always pass (whitespace-normalized) |
 
-Only the two master switches are live fields, which is exactly what makes them the only ones the config page shows and the only ones a settings write may address: they take effect immediately, without a restart. Everything else is ordinary configuration read when the entry loads, so it lives in the profile file.
+Only the two master switches are live fields, which is exactly what makes them the only ones the Plugins panel shows and the only ones a settings write may address: they take effect immediately, without a restart. Everything else is ordinary configuration read when the entry loads, so it lives in the profile file.
 
 A switch moved back to its schema default is **cleared** rather than pinned, so the profile patch keeps only what you actually changed and a later default change still reaches you.
 

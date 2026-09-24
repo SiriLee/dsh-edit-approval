@@ -1,5 +1,6 @@
 /**
- * This bundle's configuration card on the Plugins page (`plugins.bundle.config`,
+ * This bundle's configuration card on its page in the sidebar's Plugins panel
+ * (`plugins.bundle.config`,
  * keyed by the package name).
  *
  * The staging model, the field controls, and the form frame are the harness's
@@ -110,7 +111,7 @@ export interface SettingsApprovalFace extends SettingsFormActions {
 }
 
 /**
- * Props the Plugins page binds for this bundle's configuration card: the slot's
+ * Props the Plugins panel binds for this bundle's configuration card: the slot's
  * runtime owner share (`view`), the locale `t` seat, and the injected form face
  * with its `hooks` compartment rebound as the `useApprovalCard` selector hook.
  */

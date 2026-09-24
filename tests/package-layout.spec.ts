@@ -1,6 +1,13 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+/** Read a PNG's pixel dimensions from its IHDR chunk (no image dependency). */
+function pngSize(path: string): { width: number; height: number } {
+  const header = readFileSync(path).subarray(0, 24)
+  if (header.subarray(0, 8).toString('latin1') !== '\x89PNG\r\n\x1a\n') throw new Error(`${path} is not a PNG`)
+  return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) }
+}
 
 /**
  * Publish-layout contract: the manifest, the bundle patch, and the locale
@@ -180,5 +187,42 @@ describe('bundle patch', () => {
 
   it('carries no config: schema defaults are the single source of truth', () => {
     expect(patch).not.toMatch(/^\s+config:/m)
+  })
+})
+
+describe('screenshots', () => {
+  const listed = JSON.parse(readFileSync(join(ROOT, 'screenshots.json'), 'utf8')) as string[]
+  const onDisk = readdirSync(join(ROOT, 'assets', 'screenshots')).sort()
+  const READMES = ['README.md', 'README.zh.md']
+
+  it('lists every asset under assets/screenshots, and nothing else', () => {
+    // Two ways this drifts, both silent until a README renders a broken image:
+    // an asset added but never listed, and an entry left behind by a deletion.
+    expect(listed.map((rel) => rel.replace('assets/screenshots/', '')).sort()).toEqual(onDisk)
+    for (const rel of listed) expect(existsSync(join(ROOT, rel)), `${rel} is listed but missing`).toBe(true)
+  })
+
+  it('lists only 16:9 captures, so the 2x2 grid stays square', () => {
+    // The README lays the captures out in a 2x2 table at one width per cell, so
+    // images sharing a row only line up when they share an aspect ratio. A
+    // 2.6:1 crop sits in that grid as an obvious outlier. 1366x768 is off exact
+    // 16:9 by 0.0008, hence the tolerance.
+    for (const rel of listed) {
+      const { width, height } = pngSize(join(ROOT, rel))
+      expect(Math.abs(width / height - 16 / 9), `${rel} is ${width}x${height}, not 16:9`).toBeLessThan(0.01)
+    }
+  })
+
+  it('has both READMEs reference exactly the same existing screenshots', () => {
+    // Bilingual lockstep (see docs/README.md): a rename or a new capture has to
+    // land in both files, and every reference has to resolve.
+    const referenced = (file: string): string[] =>
+      [...readFileSync(join(ROOT, file), 'utf8').matchAll(/assets\/screenshots\/[^"\s]+/g)]
+        .map((match) => match[0])
+        .sort()
+    const [en, zh] = READMES.map(referenced)
+    expect(zh).toEqual(en)
+    for (const rel of en) expect(existsSync(join(ROOT, rel)), `${rel} is referenced but missing`).toBe(true)
+    for (const rel of en) expect(listed, `${rel} is used by a README but not listed`).toContain(rel)
   })
 })

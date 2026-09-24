@@ -7,7 +7,7 @@
  *    red/green per-line blocks (the reason is plain text, so per-line colouring
  *    is impossible without this), adds a disclosure button for tall diffs, and
  *    restores focus to the composer once the approval resolves.
- * 2. **The bundle's configuration card** on the Plugins page, carrying the two
+ * 2. **The bundle's configuration card** on its page in the sidebar's Plugins panel, carrying the two
  *    master switches (see `./settings-card.tsx`).
  *
  * Pure DOM injection: no new page, no new popup — the panel's stable data
@@ -182,7 +182,7 @@ export function apply(ctx: Context): void {
     style.textContent = `${PREWRAP_STYLE}\n${DIFF_STYLE}\n${COLLAPSE_STYLE}\n${CARD_STYLE}`
     document.head.appendChild(style)
 
-    // ---- configuration card (Plugins page) ----
+    // ---- configuration card (sidebar Plugins panel) ----
     // The slot key and the form's entry id are the SAME string by construction:
     // the bundle patch declares its row with `id` = `name` = package name, and
     // the page dispatches `entryKey: pkg.name` while the settings service keys
