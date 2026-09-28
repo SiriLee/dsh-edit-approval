@@ -51,7 +51,7 @@ gate on every push and pull request.
 
 Use `minor` for a change to the configuration surface or the published exports;
 this plugin is `0.x`, so those are the breaking axis. `0.4.0` was the DSH
-0.1.7-rc.1 adaptation, which removed two settings namespaces and renamed every
+0.1.7-line adaptation, which removed two settings namespaces and renamed every
 configuration key.
 
 > Local note: in a sandbox where the default npm cache is not writable,

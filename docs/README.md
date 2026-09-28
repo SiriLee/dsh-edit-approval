@@ -6,7 +6,7 @@ what has to be re-verified when DSH changes.
 
 | Document | Purpose |
 | --- | --- |
-| [`compat/0.1.7-audit.md`](compat/0.1.7-audit.md) | **The compatibility source of truth.** The seams this plugin consumes, what DSH 0.1.7-rc.1 changed, which failures were silent and why, the settings model on this line, and the boundaries that are deliberate rather than accidental. |
+| [`compat/0.1.7-audit.md`](compat/0.1.7-audit.md) | **The compatibility source of truth.** The seams this plugin consumes, what the DSH 0.1.7 line changed, which failures were silent and why, the settings model on this line, and the boundaries that are deliberate rather than accidental. |
 | [`release/release.md`](release/release.md) | Release workflow, the single-line version-alignment model, and what to re-read when moving to a new DSH line. |
 | [`npm-trusted-publishing-guide.md`](npm-trusted-publishing-guide.md) | One-off setup for OIDC publishing from GitHub Actions. |
 
