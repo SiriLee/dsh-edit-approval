@@ -81,7 +81,12 @@ describe('export surface', () => {
     for (const entry of REQUIRED_FILES) {
       expect(pkg.files, `files is missing ${entry}`).toContain(entry)
     }
-    for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'cordis.patch.yml', 'docs/README.md', 'docs/compat/0.1.7-audit.md']) {
+    // The audit filename carries the tracked DSH line, so discover it rather
+    // than pin it: a hardcoded name breaks on every line move and tells us
+    // nothing about whether the file is actually there.
+    const audits = readdirSync(join(ROOT, 'docs', 'compat')).filter((name) => name.endsWith('-audit.md'))
+    expect(audits.length, 'docs/compat holds no *-audit.md').toBe(1)
+    for (const file of ['LICENSE', 'README.md', 'README.zh.md', 'cordis.patch.yml', 'docs/README.md', `docs/compat/${audits[0]}`]) {
       expect(existsSync(join(ROOT, file)), `${file} does not exist`).toBe(true)
     }
   })
@@ -145,7 +150,7 @@ describe('single-line compatibility declaration', () => {
 
   it('keeps the engine floor in step with the declared tuple', () => {
     const floor = (pkg.peerDependencies[dshPeers[0]!] as string).slice(1)
-    expect(pkg.dsh?.engines?.dsh).toBe(`>=${floor}`)
+    expect(pkg.engines?.dsh).toBe(`>=${floor}`)
   })
 
   it('marks harness peers optional (the harness resolves them at runtime)', () => {

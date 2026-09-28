@@ -20,7 +20,7 @@
  *   A. every @deepseek-ai/dsh-* peer must encode the SAME ordered tuple
  *      sequence; per-tuple floors may differ where a package starts shipping
  *      later (dsh-settings carries `^0.1.0-rc.8`).
- *   B. `dsh.engines.dsh` must exist as a single `>=X.Y.Z[-pre]` floor equal to
+ *   B. `engines.dsh` must exist as a single `>=X.Y.Z[-pre]` floor equal to
  *      the oldest declared floor — plugin managers read it as the update guard
  *      and fail closed on `^` / `~` / multi-range values.
  *   C. the published version list is classified against the declared window, so
@@ -160,17 +160,17 @@ for (const declaration of declarations) {
 }
 const oldestFloor = lowest([...floors.values()])
 
-const engineFloor = MANIFEST.dsh?.engines?.dsh
+const engineFloor = MANIFEST.engines?.dsh
 if (typeof engineFloor !== 'string') {
-  drift.push('dsh.engines.dsh is missing (plugin managers read it as the runtime floor)')
+  drift.push('engines.dsh is missing (the manifest type names it as the runtime floor)')
 } else {
   const match = ENGINE_FLOOR.exec(engineFloor)
   if (match === null) {
     drift.push(
-      `dsh.engines.dsh "${engineFloor}" is not a single >=X.Y.Z[-pre] floor (^ / ~ / multi-range fail closed)`,
+      `engines.dsh "${engineFloor}" is not a single >=X.Y.Z[-pre] floor (^ / ~ / multi-range fail closed)`,
     )
   } else if (compareVersions(match[1], oldestFloor) !== 0) {
-    drift.push(`dsh.engines.dsh = ${match[1]} but the oldest declared floor is ${oldestFloor}`)
+    drift.push(`engines.dsh = ${match[1]} but the oldest declared floor is ${oldestFloor}`)
   }
 }
 if (drift.length > 0) reportDrift(drift)
@@ -213,7 +213,8 @@ const newest = ordered[ordered.length - 1]
  */
 const ceiling = covered[covered.length - 1] ?? highest([...floors.values()])
 
-console.log(`DSH latest:      ${latest}`)
+console.log(`registry latest: ${latest}`)
+console.log(`newest published: ${newest}`)
 console.log(`declared tuples: ${referenceTuples}`)
 console.log(
   `tuple floors:    ${[...floors.entries()].map(([tuple, floor]) => `${tuple} >= ${floor}`).join(', ')}`,
@@ -221,7 +222,7 @@ console.log(
 console.log(`engine floor:    ${engineFloor}`)
 console.log(`covered:         ${covered.length}/${ordered.length} published versions (ceiling ${ceiling})`)
 if (belowFloor.length > 0) console.log(`below floor:     ${belowFloor.join(' ')}`)
-if (unmapped.length > 0) console.log(`outside window:  ${unmapped.join(' ')}`)
+if (unmapped.length > 0) console.log(`undeclared tuples (dropped lines): ${unmapped.join(' ')}`)
 
 const gaps = unmapped.filter(
   (version) => compareVersions(version, oldestFloor) > 0 && compareVersions(version, ceiling) < 0,
@@ -242,14 +243,14 @@ if (covered.length === 0) {
 }
 
 if (compareVersions(newest, ceiling) <= 0) {
-  console.log('OK: every published DSH release is inside the declared window.')
+  console.log(`OK: no published DSH release is above the declared ceiling (${ceiling}).`)
   process.exit(0)
 }
 
 console.log(`ACTION NEEDED: DSH published ${newest}, above the declared ceiling (${ceiling}).`)
-console.log(`  1. Append "|| ^${newest}" (the verified floor) to every @deepseek-ai/dsh-* peer`)
-console.log('     range in package.json, keeping the tuple order identical across peers.')
-console.log(`  2. Leave dsh.engines.dsh at the oldest floor (>=${oldestFloor}) unless the old lines are dropped.`)
-console.log(`  3. Bump the @deepseek-ai/dsh-* devDependencies to ^${latest}, npm install, rerun`)
-console.log('     typecheck / tests / scripts/verify-host.mjs, then release.')
+console.log(`  1. Replace every @deepseek-ai/dsh-* peer tuple with ^${newest} (the verified floor).`)
+console.log('     The single-line model REPLACES, it never widens: a union re-admits the dropped lines')
+console.log('     and the admission gate stops distinguishing what was actually verified.')
+console.log(`  2. Set engines.dsh to >=${newest} and pin every @deepseek-ai/dsh-* devDependency to ${newest}.`)
+console.log('  3. npm install, rerun typecheck / tests / scripts/verify-host.mjs, then release.')
 process.exit(1)

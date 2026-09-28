@@ -128,7 +128,7 @@ dsh plugin --profile web add dsh-edit-approval
 
 - Node.js `^22.19.0 || >=24.0.0`。
 - DeepSeek Harness web profile（`dsh --profile web`）；`@deepseek-ai/*` 由 harness 在运行时解析，本包不会自行拉取。
-- **仅支持 DSH `0.1.7` 这一条线**——验证目标是 `0.1.7-rc.2`（该线的 `latest`，也是本次发布 `devDependencies` 钉住的版本）。声明为单个 `^0.1.7-rc.1` peer 元组，`dsh.engines.dsh = ">=0.1.7-rc.1"`：同一元组，因此 `rc.1 → rc.2` 无需改动 peer，且两者都在声明窗口内。本插件一次只追一条 DSH 线，不保持对更早版本线的兼容：声明之外的运行时会在启动时**跳过该 bundle 并给出 peer 诊断**，而不是把它加载成半坏状态。
+- **仅支持 DSH `0.2.0` 这一条线**——验证目标是 `0.2.0-rc.1`，也是本次发布 `devDependencies` 钉住的版本。声明为每个 harness 包一个 `^0.2.0-rc.1` peer 元组，以及 `engines.dsh = ">=0.2.0-rc.1"`。本插件一次只追一条 DSH 线，线一移动就丢掉上一条：该范围放行 `0.2.0-rc.1` 至 `0.2.x`（同元组的预发布滚动无需改动 peer），而 `0.1.7-rc.2` 与 `0.3.0-rc.1` 会在启动时**被跳过并给出 peer 诊断**，而不是加载成半坏状态。
 - `node scripts/check-dsh-version.mjs` 盯发布节奏：校验声明自洽（各 harness peer 同一元组、engine floor 同步），并在 DSH 发布了声明窗口之上的版本时报告。
 - **为什么是单线。** DSH 0.1.7 把本插件两扇门共用的设置命名空间注册表换成了"每个 profile 条目一个 live `Config`"，同时删除了浏览器侧 `dsh-client-runtime` 包与 `settingsScope` 服务。旧模型没有 1:1 后继，因此同时兼容更早的线意味着维护两套设置模型、两条客户端写路径与两种会话读取形状。逐 seam 的完整记录（包括哪些失效是静默的）见 [docs/compat/0.1.7-audit.md](docs/compat/0.1.7-audit.md)。
 - 注册的工具名是 `str_replace_editor`（下划线），与 npm 包名 `@deepseek-ai/dsh-tool-str-replace-editor` 不同。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-edit-approval",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Edit and command approval with a line diff · 文件修改与命令执行审批，附行级 diff",
   "keywords": [
     "dsh",
@@ -44,14 +44,12 @@
     "locale/*.json"
   ],
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.0-rc.1"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "engines": {
-      "dsh": ">=0.1.7-rc.1"
     },
     "client": {
       "platform": "web",
@@ -76,15 +74,15 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-locale": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-client-ui-plugin-manager": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-commands": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-fs": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-settings": "^0.1.7-rc.1",
-    "@deepseek-ai/dsh-tools": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-client-locale": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-fs": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependenciesMeta": {
@@ -124,16 +122,16 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.4",
-    "@deepseek-ai/dsh-client-locale": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-store": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-settings": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-commands": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-fs": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-tools": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-store": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-commands": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-fs": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.1",
     "@deepseek-ai/schemastery": "3.18.4",
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.31",
