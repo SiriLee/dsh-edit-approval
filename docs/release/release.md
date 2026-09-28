@@ -38,9 +38,22 @@ declared floor, and a release published above the declared window is reported
 ```sh
 npm run check                                        # the full gate, must be green
 node scripts/check-dsh-version.mjs                   # declaration still honest?
+# write docs/release/<version>.md — the release note (see below)
 npm version patch                                    # or minor / major
 git push origin main --tags                          # triggers .github/workflows/publish.yml
+gh release edit v<version> --notes-file docs/release/<version>.md   # replace the generated body
 ```
+
+**Per-version release notes live at `docs/release/<version>.md`, and the GitHub
+Release body is that same file.** The workflow's `--generate-notes` body is a
+commit list, which says nothing about the DSH range or the upgrade steps; write
+the note by hand and push it onto the release with `gh release edit` so the file
+and the published body cannot drift. Keep the note **bilingual** (English, then
+中文), like the READMEs.
+
+A note must state, at minimum: the **supported DSH range** and the version it was
+verified against, any breaking change with its migration, what was verified
+machine-side, and the deliberate boundaries. `0.4.0` is the worked example.
 
 `npm version` rewrites `package.json` and creates the tag; the workflow then
 verifies the tag matches `package.json`, runs the same gate, publishes through
@@ -48,6 +61,11 @@ GitHub Actions Trusted Publishing (OIDC, no stored `NPM_TOKEN`) with Sigstore
 provenance, and creates a GitHub Release. Publishing is idempotent — a version
 already on the registry is skipped. CI (`.github/workflows/ci.yml`) runs the same
 gate on every push and pull request.
+
+> `npm view` right after a publish can still report the previous `latest`: the
+> registry needs a moment to propagate. Query
+> `https://registry.npmjs.org/<pkg>` directly before concluding that a successful
+> publish step did nothing.
 
 Use `minor` for a change to the configuration surface or the published exports;
 this plugin is `0.x`, so those are the breaking axis. `0.4.0` was the DSH

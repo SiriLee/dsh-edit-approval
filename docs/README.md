@@ -8,6 +8,7 @@ what has to be re-verified when DSH changes.
 | --- | --- |
 | [`compat/0.1.7-audit.md`](compat/0.1.7-audit.md) | **The compatibility source of truth.** The seams this plugin consumes, what the DSH 0.1.7 line changed, which failures were silent and why, the settings model on this line, and the boundaries that are deliberate rather than accidental. |
 | [`release/release.md`](release/release.md) | Release workflow, the single-line version-alignment model, and what to re-read when moving to a new DSH line. |
+| [`release/0.4.0.md`](release/0.4.0.md) | The 0.4.0 release notes (bilingual) — the same text published on the GitHub Release. States the supported DSH range, the breaking settings rename and its migration, and what was verified. |
 | [`npm-trusted-publishing-guide.md`](npm-trusted-publishing-guide.md) | One-off setup for OIDC publishing from GitHub Actions. |
 
 ## Conventions
