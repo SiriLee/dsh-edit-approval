@@ -1,10 +1,14 @@
 # dsh-edit-approval bundle layer.
 #
-# Inserts the host plugin row. The row carries NO config on purpose: schema
-# defaults in src/index.ts are the single source of truth, so a user overlay
-# in a profile's cordis.patch.yml only has to restate the key it changes.
-# The runtime settings namespace `edit-approval` then layers
-# schema defaults < row config < user settings page (persisted).
+# Inserts the host plugin row. The row carries NO config on purpose: the schema
+# defaults in src/index.ts are the single source of truth, so an overlay in a
+# profile's cordis.patch.yml only has to restate the key it changes.
+#
+# This row is the plugin's one settings entry, layered as
+# schema defaults < row config < persisted user layer — the two master switches
+# on the plugin's page in the sidebar's Plugins panel. A switch written back to
+# its default is cleared rather than pinned, so this file stays free of values
+# the user never chose.
 - insert:
     - id: dsh-edit-approval
       name: dsh-edit-approval
