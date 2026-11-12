@@ -6,6 +6,8 @@ import {
   COLLAPSE_STYLE,
   installCollapseButton,
 } from '../src/client/collapse.ts'
+import { renderDiffRows } from '../src/client/diff-rows.ts'
+import { findHeadline } from '../src/client/headline.ts'
 
 /** Minimal ApprovalPanel-shaped fixture (mirrors the harness DOM anchors). */
 function makePanel(reason: string): HTMLElement {
@@ -25,16 +27,35 @@ function makePanel(reason: string): HTMLElement {
   return panel
 }
 
-/** Mimic the plugin's `renderDiffRows` rebuild: split the headline text into row divs. */
+/** 0.2.2+ shape: the headline sits inside a `.heading` row that also carries a warning chip. */
+function makePanelV022(reason: string): HTMLElement {
+  const panel = document.createElement('div')
+  panel.setAttribute('data-approval-key', 'test-key-2')
+  const card = document.createElement('div')
+  const strip = document.createElement('div')
+  strip.className = 'strip'
+  const body = document.createElement('div')
+  body.setAttribute('data-approval-scroll', '')
+  const heading = document.createElement('div')
+  heading.className = 'heading'
+  const headline = document.createElement('div')
+  headline.className = 'headline'
+  headline.textContent = reason
+  heading.appendChild(headline)
+  body.appendChild(heading)
+  card.append(strip, body)
+  panel.appendChild(card)
+  return panel
+}
+
+/**
+ * Run the plugin's real rebuild. Calling `renderDiffRows` (rather than a
+ * look-alike) matters: the `dsh-ea-diff-*` classes it sets are how the locator
+ * recognises a headline it has already rebuilt.
+ */
 function rebuildHeadline(panel: HTMLElement): void {
   const headline = panel.querySelector('[data-approval-scroll] > div') as HTMLElement
-  const lines = headline.textContent!.split('\n')
-  headline.textContent = ''
-  for (const line of lines) {
-    const row = document.createElement('div')
-    row.textContent = line
-    headline.appendChild(row)
-  }
+  renderDiffRows(headline)
 }
 
 const labels = { collapse: '折叠审批详情', expand: '展开审批详情' }
@@ -76,6 +97,25 @@ describe('installCollapseButton', () => {
     const panel = makePanel('edit · a.ts (modify): +3 -2\n+ old line\n- new line')
     rebuildHeadline(panel)
     expect(panel.querySelector('[data-approval-scroll] > div')!.textContent).not.toContain('\n')
+
+    installCollapseButton(panel, labels)
+    expect(panel.querySelector(`.${COLLAPSE_BUTTON_CLASS}`)).not.toBeNull()
+  })
+
+  it('installs when the headline is wrapped in the 0.2.2 `.heading` row', () => {
+    // Regression for DSH 0.2.2: the headline moved from the body's first child
+    // into a `.heading` flex row (`align-items: center; flex-wrap: wrap`).
+    // Positional selectors then landed on that wrapper, so the injected rows
+    // became flex items and the diff wrapped sideways instead of stacking.
+    const panel = makePanelV022('edit · a.ts (modify): +1 -1\n    1| -old\n    1| +new')
+    const heading = panel.querySelector('.heading') as HTMLElement
+    const headline = findHeadline(panel)
+    expect(headline).not.toBeNull()
+    expect(headline).not.toBe(heading) // must not be the flex wrapper
+
+    renderDiffRows(headline!)
+    expect(heading.children.length).toBe(1) // wrapper untouched
+    expect(headline!.children.length).toBeGreaterThan(1) // rows stacked in the headline
 
     installCollapseButton(panel, labels)
     expect(panel.querySelector(`.${COLLAPSE_BUTTON_CLASS}`)).not.toBeNull()

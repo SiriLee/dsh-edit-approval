@@ -43,6 +43,7 @@ import {
 } from './settings-card.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
 import { isDiffReason, renderDiffRows } from './diff-rows.ts'
+import { BODY_SELECTOR, PANEL_SELECTOR, findHeadline } from './headline.ts'
 import { FocusRestore } from './refocus.ts'
 import { NS, en, zh, type ApprovalKey } from './locales.ts'
 
@@ -71,21 +72,18 @@ interface SlotsLike {
 /** The config slot a bundle registers its own form into. */
 const BUNDLE_CONFIG_SLOT = 'plugins.bundle.config'
 
-/** The approval panel root anchor (set by ui-approval's ApprovalPanel). */
-const PANEL_SELECTOR = '[data-approval-key]'
-
 /**
- * Plugin-side compensation for a harness presentation quirk: the approval
- * panel headlines the `reason` text in `.headline`, whose CSS has no
+ * Plugin-side compensation for a harness presentation quirk: the panel
+ * headlines the `reason` text, and the headline's CSS carries no
  * `white-space: pre-wrap`, so HTML collapses the `\n` line breaks of our
- * multi-line diff into spaces. This rule targets the headline by stable
- * structural anchors (the panel root and the scrollable body seat, both
- * data attributes) and restores the line structure. Harmless if the harness
- * ever adds `pre-wrap` upstream — the selector simply stops matching nothing
- * extra.
+ * multi-line diff into spaces. Restoring it on the scrollable body seat works
+ * because `white-space` is INHERITED: the rule reaches the headline whichever
+ * wrapper the harness puts it in (0.2.2 added one — see `./headline.ts`), and a
+ * positional selector would have started targeting that wrapper instead.
+ * Harmless if the harness ever adds `pre-wrap` upstream.
  */
 const PREWRAP_STYLE = [
-  `[data-approval-key] [data-approval-scroll] > div:first-child { white-space: pre-wrap; }`,
+  `${PANEL_SELECTOR} ${BODY_SELECTOR} { white-space: pre-wrap; }`,
 ].join('\n')
 
 /**
@@ -102,7 +100,7 @@ const PREWRAP_STYLE = [
  * (bash command approvals keep the panel's native styling).
  */
 const DIFF_STYLE = [
-  '[data-approval-key].dsh-ea-kind-diff [data-approval-scroll] > div:first-child {',
+  `${PANEL_SELECTOR}.dsh-ea-kind-diff ${BODY_SELECTOR} {`,
   '  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);',
   '  font-size: 13px;',
   '  line-height: 20px;',
@@ -112,9 +110,6 @@ const DIFF_STYLE = [
   '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }',
   '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }',
 ].join('\n')
-
-/** The panel's headline seat (stable data-attribute anchor, same as PREWRAP). */
-const HEADLINE_SELECTOR = '[data-approval-scroll] > div:first-child'
 
 /** Panels already enhanced in this page lifetime. */
 const enhanced = new WeakSet<Element>()
@@ -134,7 +129,7 @@ type PanelKey = Extract<ApprovalKey, 'approval.collapse' | 'approval.expand'>
  * @returns true — the caller marks the panel as enhanced.
  */
 function enhance(panel: Element, t: (key: PanelKey) => string): boolean {
-  const headline = panel.querySelector<HTMLElement>(HEADLINE_SELECTOR)
+  const headline = findHeadline(panel)
   if (headline !== null) {
     const text = headline.textContent ?? ''
     if (isDiffReason(text)) {
@@ -143,8 +138,10 @@ function enhance(panel: Element, t: (key: PanelKey) => string): boolean {
       panel.classList.add('dsh-ea-kind-diff')
       renderDiffRows(headline)
       // Collapse button: only for real (multi-line) diffs, at the strip's right end.
+      // The resolved headline is passed through: after the rebuild its first text
+      // node belongs to a row, so re-resolving would find that row instead.
       if (text.includes('\n')) {
-        installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') })
+        installCollapseButton(panel, { collapse: t('approval.collapse'), expand: t('approval.expand') }, headline)
       }
     } else {
       // Command kind (bash approvals): keep the panel's native look — the

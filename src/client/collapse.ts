@@ -13,6 +13,8 @@
  * @module dsh-edit-approval/client/collapse
  */
 
+import { BODY_SELECTOR, findHeadline } from './headline.ts'
+
 /** Card class toggled by the collapse button (the body-hiding rule lives in {@link COLLAPSE_STYLE}). */
 export const COLLAPSED_CLASS = 'dsh-ea-collapsed'
 
@@ -21,9 +23,6 @@ export const COLLAPSE_BUTTON_CLASS = 'dsh-ea-collapse-btn'
 
 /** Per-panel `aria-controls` id prefix for the scrollable body. */
 const BODY_ID_PREFIX = 'dsh-ea-body-'
-
-/** The scrollable body seat (the same structural anchor the diff rendering uses). */
-const BODY_SELECTOR = '[data-approval-scroll]'
 
 /** Counter fallback when a panel carries no usable `data-approval-key`. */
 let autoBodyId = 0
@@ -82,18 +81,25 @@ export interface CollapseLabels {
  * action label, and leaves the diff DOM untouched.
  * @param panel - the `[data-approval-key]` panel root.
  * @param labels - localized button labels.
+ * @param headline - the already-resolved headline, when the caller rebuilt it.
+ *   Pass it: after `renderDiffRows` the first text node belongs to the first
+ *   rendered row, so re-resolving would find a row instead of the headline.
  */
-export function installCollapseButton(panel: Element, labels: CollapseLabels): void {
+export function installCollapseButton(
+  panel: Element,
+  labels: CollapseLabels,
+  headline?: HTMLElement | null,
+): void {
   if (panel.querySelector(`.${COLLAPSE_BUTTON_CLASS}`) !== null) return // idempotent
   const body = panel.querySelector<HTMLElement>(BODY_SELECTOR)
   if (body === null) return
-  const headline = body.firstElementChild
+  const seat = headline ?? findHeadline(panel)
   // A diff is present either before the headline rebuild (raw text still
   // carries `\n`) or after it (the rebuild splits the text into row divs, so
   // the concatenated textContent has no newlines — but the headline then has
   // >1 child). Single-line escalation approvals have neither, so they keep
   // the native compact panel.
-  const multiLine = (headline?.children.length ?? 0) > 1 || (headline?.textContent ?? '').includes('\n')
+  const multiLine = (seat?.children.length ?? 0) > 1 || (seat?.textContent ?? '').includes('\n')
   if (!multiLine) return
   const strip = panel.firstElementChild?.firstElementChild
   if (strip === null || strip === undefined) return
