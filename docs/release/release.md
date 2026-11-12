@@ -6,7 +6,7 @@
 **single** peer tuple plus an engine floor:
 
 ```jsonc
-"engines": { "node": "^22.19.0 || >=24.0.0", "dsh": ">=0.2.0-rc.1" },
+"engines": { "node": "^22.19.0 || >=24.0.0", "dsh": "^0.2.0-rc.1" },
 "peerDependencies": {
   "@deepseek-ai/dsh-tools": "^0.2.0-rc.1",
   // … every harness package, the same tuple
@@ -36,7 +36,7 @@ at startup with a peer diagnostic — a loud, diagnosable outcome — instead of
 loading it into a state where it silently does nothing.
 
 `node scripts/check-dsh-version.mjs` guards the declaration: every harness peer
-must carry the identical tuple sequence, `engines.dsh` must equal the oldest
+must carry the identical range, `engines.dsh` must be that same bounded range
 declared floor, and a release published above the declared window is reported
 (exit 1). Run it before cutting a release.
 
@@ -114,7 +114,7 @@ Do these in order; each one turns a silent failure mode into a loud one.
    ```
    Empty output means a manifest-only roll. `0.1.7-rc.2 → 0.2.0-rc.1` was one.
 2. **Replace the peer tuples** with `^<new-floor>`, one per harness package, and
-   set `engines.dsh` to the same floor — under the standard npm `engines` field,
+   set `engines.dsh` to the same BOUNDED range, under the standard npm `engines` field,
    which is where the upstream manifest type (`DshEnginesManifest`) names it.
    Never append `||`: a union re-admits the dropped line and the gate stops
    distinguishing what was actually verified.

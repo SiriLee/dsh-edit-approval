@@ -20,11 +20,11 @@
  *   A. every @deepseek-ai/dsh-* peer must encode the SAME ordered tuple
  *      sequence; per-tuple floors may differ where a package starts shipping
  *      later (dsh-settings carries `^0.1.0-rc.8`).
- *   B. `engines.dsh` must exist as a single `>=X.Y.Z[-pre]` floor equal to
- *      the oldest declared floor — plugin managers read it as the update guard
- *      and fail closed on `^` / `~` / multi-range values.
- *   C. the published version list is classified against the declared window, so
- *      a release above the ceiling cannot slip through unnoticed.
+ *   B. `engines.dsh` must carry the SAME bounded `^X.Y.Z[-pre]` range as the
+ *      peers: the admission gate lets an own `engines.dsh` decide ALONE and
+ *      ignores every peer, so a bare `>=floor` there silently drops the ceiling.
+ *   C. the published version list is classified against the declared WINDOW
+ *      (`[floor, next-minor-0)`), the same predicate the gate applies.
  *
  * Exit codes:
  *   0 — declaration is consistent and the newest published DSH is covered.
@@ -46,7 +46,7 @@ const REGISTRY = `https://registry.npmjs.org/${PACKAGE}`
 /** The only peer term shape this script can verify: `^X.Y.Z[-pre]`. */
 const PEER_TERM = /^\^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/
 /** The engine floor form plugin managers accept: a single `>=X.Y.Z[-pre]`. */
-const ENGINE_FLOOR = /^>=(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/
+const ENGINE_FLOOR = /^\^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/
 
 /** Parse a version into its numeric triple plus prerelease identifiers. */
@@ -148,29 +148,37 @@ for (const declaration of others) {
   }
 }
 
-/** The most permissive floor per tuple across every peer: the union's floor. */
-const floors = new Map()
-for (const declaration of declarations) {
-  for (const term of declaration.terms) {
-    const current = floors.get(term.tuple)
-    if (current === undefined || compareVersions(term.version, current) < 0) {
-      floors.set(term.tuple, term.version)
-    }
-  }
-}
-const oldestFloor = lowest([...floors.values()])
+/**
+ * One window per declared term: `^A.B.C[-pre]` covers `[A.B.C-pre,
+ * A.(B+1).0-0)`. That `-0` upper bound is the caret's own desugaring, and it is
+ * why a window stops short of the next minor's prereleases — the same predicate
+ * the admission gate applies with `includePrerelease`. Classifying releases by
+ * tuple instead made this script disagree with the gate in both directions.
+ */
+const windows = reference.terms.map((term) => {
+  const parsed = parseVersion(term.version)
+  return { floor: term.version, ceiling: `${parsed.parts[0]}.${parsed.parts[1] + 1}.0-0` }
+})
 
+// The admission gate lets an own `engines.dsh` decide ALONE and ignores every
+// peer (verified against 0.2.2: a bare `>=floor` here admitted 0.3.0-rc.1 and
+// 1.0.0). So this field must carry the same BOUNDED range as the peers — a lower
+// bound alone silently removes the line ceiling.
 const engineFloor = MANIFEST.engines?.dsh
 if (typeof engineFloor !== 'string') {
-  drift.push('engines.dsh is missing (the manifest type names it as the runtime floor)')
+  drift.push('engines.dsh is missing — the admission gate prefers it alone, so omitting it moves the boundary')
 } else {
   const match = ENGINE_FLOOR.exec(engineFloor)
   if (match === null) {
     drift.push(
-      `engines.dsh "${engineFloor}" is not a single >=X.Y.Z[-pre] floor (^ / ~ / multi-range fail closed)`,
+      `engines.dsh "${engineFloor}" must be a bounded ^X.Y.Z[-pre] range: the gate reads it alone, ` +
+        'so a bare >= floor or a multi-range would drop the ceiling the peers encode',
     )
-  } else if (compareVersions(match[1], oldestFloor) !== 0) {
-    drift.push(`engines.dsh = ${match[1]} but the oldest declared floor is ${oldestFloor}`)
+  } else if (reference !== undefined) {
+    const peerRange = MANIFEST.peerDependencies[reference.name]
+    if (engineFloor !== peerRange) {
+      drift.push(`engines.dsh "${engineFloor}" must equal the peer range "${peerRange}" (one window, two readers)`)
+    }
   }
 }
 if (drift.length > 0) reportDrift(drift)
@@ -195,62 +203,51 @@ if (typeof latest !== 'string' || published.length === 0) {
 }
 
 const ordered = [...published].sort(compareVersions)
-const covered = []
-const belowFloor = []
-const unmapped = []
-for (const version of ordered) {
-  const floor = floors.get(tupleOf(version))
-  if (floor === undefined) unmapped.push(version)
-  else if (compareVersions(version, floor) < 0) belowFloor.push(version)
-  else covered.push(version)
-}
 const newest = ordered[ordered.length - 1]
-/**
- * Highest declared version: the ceiling above which a release needs a new term.
- * Every declared term accepts same-tuple rolls above its floor, so the top of
- * the window is the newest covered release — or, with an empty window, the
- * highest declared floor.
- */
-const ceiling = covered[covered.length - 1] ?? highest([...floors.values()])
 
-console.log(`registry latest: ${latest}`)
+const inside = (version) => windows.some(
+  (window) => compareVersions(version, window.floor) >= 0 && compareVersions(version, window.ceiling) < 0,
+)
+const covered = ordered.filter(inside)
+const belowFloor = ordered.filter(
+  (version) => windows.every((window) => compareVersions(version, window.floor) < 0),
+)
+const aboveWindow = ordered.filter(
+  (version) => windows.every((window) => compareVersions(version, window.ceiling) >= 0),
+)
+
+console.log(`registry latest:  ${latest}`)
 console.log(`newest published: ${newest}`)
-console.log(`declared tuples: ${referenceTuples}`)
+console.log(`declared window:  ${MANIFEST.peerDependencies[reference.name]}`)
+console.log(`                  ${windows.map((w) => `[${w.floor}, ${w.ceiling})`).join(' ∪ ')}`)
+console.log(`engines.dsh:      ${engineFloor}`)
 console.log(
-  `tuple floors:    ${[...floors.entries()].map(([tuple, floor]) => `${tuple} >= ${floor}`).join(', ')}`,
+  `covered:          ${covered.length}/${ordered.length} published versions` +
+    (covered.length > 0 ? ` (newest ${covered[covered.length - 1]})` : ''),
 )
-console.log(`engine floor:    ${engineFloor}`)
-console.log(`covered:         ${covered.length}/${ordered.length} published versions (ceiling ${ceiling})`)
-if (belowFloor.length > 0) console.log(`below floor:     ${belowFloor.join(' ')}`)
-if (unmapped.length > 0) console.log(`undeclared tuples (dropped lines): ${unmapped.join(' ')}`)
-
-const gaps = unmapped.filter(
-  (version) => compareVersions(version, oldestFloor) > 0 && compareVersions(version, ceiling) < 0,
-)
-if (gaps.length > 0) {
-  console.log(
-    `WARN: published inside the declared window but never declared: ${gaps.join(' ')} — ` +
-      'either accept the gap in the README or drop the surrounding lines from the window.',
-  )
+if (belowFloor.length > 0) {
+  console.log(`older lines:      ${belowFloor.length} releases below the window floor (dropped by design)`)
 }
 
 if (covered.length === 0) {
   console.log(
-    'ACTION NEEDED: no published DSH release falls inside the declared window — the floors ' +
-      'look ahead of the registry. Fix package.json instead of trusting the declaration.',
+    'ACTION NEEDED: no published DSH release falls inside the declared window — the range ' +
+      'looks ahead of the registry. Fix package.json instead of trusting the declaration.',
   )
   process.exit(1)
 }
 
-if (compareVersions(newest, ceiling) <= 0) {
-  console.log(`OK: no published DSH release is above the declared ceiling (${ceiling}).`)
+if (aboveWindow.length === 0) {
+  console.log('OK: no published DSH release is above the declared window.')
   process.exit(0)
 }
 
-console.log(`ACTION NEEDED: DSH published ${newest}, above the declared ceiling (${ceiling}).`)
-console.log(`  1. Replace every @deepseek-ai/dsh-* peer tuple with ^${newest} (the verified floor).`)
+console.log(`ACTION NEEDED: DSH published ${newest}, above the declared window.`)
+console.log(`  1. Replace every @deepseek-ai/dsh-* peer range with ^${newest} (the verified floor).`)
 console.log('     The single-line model REPLACES, it never widens: a union re-admits the dropped lines')
 console.log('     and the admission gate stops distinguishing what was actually verified.')
-console.log(`  2. Set engines.dsh to >=${newest} and pin every @deepseek-ai/dsh-* devDependency to ${newest}.`)
-console.log('  3. npm install, rerun typecheck / tests / scripts/verify-host.mjs, then release.')
+console.log(`  2. Set engines.dsh to "^${newest}" — the SAME bounded range as the peers. The gate reads`)
+console.log('     it alone, so a bare floor there would remove the ceiling entirely.')
+console.log(`  3. Pin every @deepseek-ai/dsh-* devDependency to ${newest}, npm install, rerun`)
+console.log('     typecheck / tests / scripts/verify-host.mjs, then release.')
 process.exit(1)

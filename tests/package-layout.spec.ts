@@ -148,9 +148,13 @@ describe('single-line compatibility declaration', () => {
     }
   })
 
-  it('keeps the engine floor in step with the declared tuple', () => {
-    const floor = (pkg.peerDependencies[dshPeers[0]!] as string).slice(1)
-    expect(pkg.engines?.dsh).toBe(`>=${floor}`)
+  it('gives engines.dsh the same bounded range as the peers', () => {
+    // The admission gate lets an own `engines.dsh` decide ALONE and ignores every
+    // peer, so this field must carry the ceiling too: a bare `>=floor` here
+    // admitted 0.3.0-rc.1 and 1.0.0 on DSH 0.2.2.
+    const range = pkg.peerDependencies[dshPeers[0]!] as string
+    expect(pkg.engines?.dsh).toBe(range)
+    expect(range.startsWith('^'), 'a bounded range is the only thing the gate reads').toBe(true)
   })
 
   it('marks harness peers optional (the harness resolves them at runtime)', () => {
