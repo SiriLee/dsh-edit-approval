@@ -38,7 +38,10 @@ export const BODY_SELECTOR = '[data-approval-scroll]'
 /** `NodeFilter.SHOW_TEXT`, spelled out so no DOM global is required. */
 const SHOW_TEXT = 4
 
-/** Class prefix of the rows this plugin renders into the headline. */
+/**
+ * Class prefix of the rows this plugin renders into the headline. Matched with
+ * `*=` so a row keeps matching if another class is ever put on it.
+ */
 const ROW_PREFIX = 'dsh-ea-diff-'
 
 /**
@@ -52,7 +55,7 @@ export function findHeadline(panel: Element): HTMLElement | null {
   const body = panel.querySelector(BODY_SELECTOR)
   if (body === null) return null
   // Already rebuilt: our own rows are the headline's children.
-  const row = body.querySelector(`[class^="${ROW_PREFIX}"]`)
+  const row = body.querySelector(`[class*="${ROW_PREFIX}"]`)
   if (row !== null && row.parentElement !== null && row.parentElement !== body) return row.parentElement
   const doc = body.ownerDocument ?? document
   const walker = doc.createTreeWalker(body, SHOW_TEXT)

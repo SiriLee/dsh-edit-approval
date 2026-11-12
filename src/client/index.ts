@@ -42,7 +42,7 @@ import {
   type ApprovalPolicy,
 } from './settings-card.tsx'
 import { COLLAPSE_STYLE, installCollapseButton } from './collapse.ts'
-import { isDiffReason, renderDiffRows } from './diff-rows.ts'
+import { diffRowsStyle, isDiffReason, renderDiffRows } from './diff-rows.ts'
 import { BODY_SELECTOR, PANEL_SELECTOR, findHeadline } from './headline.ts'
 import { FocusRestore } from './refocus.ts'
 import { NS, en, zh, type ApprovalKey } from './locales.ts'
@@ -68,6 +68,9 @@ interface SlotsLike {
   inject(name: string, callback: () => unknown): () => void
   register(options: Record<string, unknown>, component: unknown): () => void
 }
+
+/** Kind marker for diff panels: the diff stylesheet is scoped to it. */
+const DIFF_KIND_CLASS = 'dsh-ea-kind-diff'
 
 /** The config slot a bundle registers its own form into. */
 const BUNDLE_CONFIG_SLOT = 'plugins.bundle.config'
@@ -99,17 +102,8 @@ const PREWRAP_STYLE = [
  * to the panel root, so the diff look never leaks onto other approval kinds
  * (bash command approvals keep the panel's native styling).
  */
-const DIFF_STYLE = [
-  `${PANEL_SELECTOR}.dsh-ea-kind-diff ${BODY_SELECTOR} {`,
-  '  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);',
-  '  font-size: 13px;',
-  '  line-height: 20px;',
-  '}',
-  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-add { color: var(--dsw-alias-state-success-primary, #2f9e44); }',
-  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-remove { color: var(--dsw-alias-state-error-primary, #e03131); }',
-  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }',
-  '[data-approval-key].dsh-ea-kind-diff .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }',
-].join('\n')
+/** The diff panel's stylesheet, scoped to this plugin's kind marker. */
+const DIFF_STYLE = diffRowsStyle(PANEL_SELECTOR, DIFF_KIND_CLASS)
 
 /** Panels already enhanced in this page lifetime. */
 const enhanced = new WeakSet<Element>()
@@ -135,7 +129,7 @@ function enhance(panel: Element, t: (key: PanelKey) => string): boolean {
     if (isDiffReason(text)) {
       // Diff kind (edit approvals): the red/green rebuild plus the collapse
       // button, and the diff styles scoped to this marker.
-      panel.classList.add('dsh-ea-kind-diff')
+      panel.classList.add(DIFF_KIND_CLASS)
       renderDiffRows(headline)
       // Collapse button: only for real (multi-line) diffs, at the strip's right end.
       // The resolved headline is passed through: after the rebuild its first text

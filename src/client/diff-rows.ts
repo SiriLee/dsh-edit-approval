@@ -15,6 +15,48 @@
  */
 
 /**
+ * Marker class added to a rebuilt headline; the diff's font rules hang off it.
+ *
+ * The name deliberately avoids the `dsh-ea-diff-` row prefix: `findHeadline`
+ * looks for a row by that prefix, and a headline carrying it would be mistaken
+ * for one of its own rows after a rebuild.
+ *
+ * It has to sit on the HEADLINE element, not on an ancestor: the panel's own
+ * `.headline` rule sets `font-size: 15px; line-height: 24px; font-weight: 500`,
+ * and a direct rule on an element always beats a value inherited from an
+ * ancestor. Styling the scroll body therefore left the diff at the panel's
+ * headline size — visibly larger than the 13px/monospace this plugin renders.
+ */
+export const DIFF_HEADLINE_CLASS = 'dsh-ea-headline'
+
+/**
+ * The diff's stylesheet: the code font on the rebuilt headline, plus one colour
+ * per row role. Scoped by the caller's panel selector and kind marker so the diff
+ * look never leaks onto other approval kinds.
+ *
+ * The font rule targets the HEADLINE, not an ancestor: the panel's own
+ * `.headline` rule sets `font-size: 15px; line-height: 24px`, and a direct rule
+ * on an element always beats a value inherited from an ancestor.
+ * @param panel - selector matching the panel root that carries the kind class.
+ * @param kind - the kind marker class that identifies diff panels.
+ * @returns CSS text for a `<style>` element.
+ */
+export function diffRowsStyle(panel: string, kind: string): string {
+  const scope = `${panel}.${kind}`
+  return [
+    `${scope} .${DIFF_HEADLINE_CLASS} {`,
+    '  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);',
+    '  font-size: 13px;',
+    '  line-height: 20px;',
+    '}',
+    `${scope} .dsh-ea-diff-add { color: var(--dsw-alias-state-success-primary, #2f9e44); }`,
+    `${scope} .dsh-ea-diff-remove { color: var(--dsw-alias-state-error-primary, #e03131); }`,
+    `${scope} .dsh-ea-diff-context { color: var(--dsw-alias-label-tertiary, #868e96); }`,
+    `${scope} .dsh-ea-diff-ellipsis { color: var(--dsw-alias-label-tertiary, #868e96); opacity: .6; padding-left: 8px; }`,
+  ].join('\n')
+}
+
+/**
  * Whether an approval reason is a real line diff: it carries numbered change
  * rows (`   15| +XI-EDITED`). Edit approvals always do; the bash-approval
  * reason is plain text (header + `$ command` [+ flags]) and must NOT go
@@ -38,6 +80,7 @@ export function renderDiffRows(headline: HTMLElement): void {
   const text = headline.textContent ?? ''
   if (!text.includes('\n')) return // single-line reason: leave it as-is
   headline.textContent = ''
+  headline.classList.add(DIFF_HEADLINE_CLASS)
   const lines = text.split('\n')
   const ellipsis = (): void => {
     const row = document.createElement('div')

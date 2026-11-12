@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { renderDiffRows } from '../src/client/diff-rows.ts'
+import { DIFF_HEADLINE_CLASS, renderDiffRows } from '../src/client/diff-rows.ts'
 
 /** Rebuild a synthetic headline seat (mirrors the harness `.headline` anchor). */
 function render(reason: string): { classes: string[]; texts: string[] } {
@@ -42,6 +42,21 @@ describe('renderDiffRows', () => {
     // The `old:new` colon keeps `1:1 -webkit-box` from matching the change
     // pattern; it is skipped, with the run marked by an ellipsis.
     expect(classes).toEqual(['dsh-ea-diff-context', 'dsh-ea-diff-ellipsis', 'dsh-ea-diff-remove', 'dsh-ea-diff-add'])
+  })
+
+  it('marks the rebuilt headline so the diff font can target it', () => {
+    // The marker must live on the headline element: see client-diff-style.spec.ts.
+    const headline = document.createElement('div')
+    headline.textContent = 'edit · a.ts (modify): +1 -1\n    1| -old\n    1| +new'
+    renderDiffRows(headline)
+    expect(headline.classList.contains(DIFF_HEADLINE_CLASS)).toBe(true)
+  })
+
+  it('leaves a single-line reason unmarked', () => {
+    const headline = document.createElement('div')
+    headline.textContent = 'bash · push to remote'
+    renderDiffRows(headline)
+    expect(headline.classList.contains(DIFF_HEADLINE_CLASS)).toBe(false)
   })
 
   it('marks hunk gaps with an ellipsis via the index jump', () => {
